@@ -201,3 +201,53 @@ body.touch-device #touch-controls {
     bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ---------- Sound on/off button ---------- */
+
+#sound-toggle {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  min-width: 86px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(15, 15, 25, 0.5);
+  color: #ffffff;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 11;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Sound is off */
+#sound-toggle.off {
+  background: rgba(120, 30, 30, 0.55);
+  opacity: 0.85;
+}
+
+@media (max-width: 768px) {
+  #sound-toggle {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    min-width: 76px;
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+}
+
+@media (max-height: 480px) {
+  #sound-toggle {
+    top: calc(6px + env(safe-area-inset-top, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
+  }
+}
