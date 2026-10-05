@@ -1,8 +1,10 @@
-
-// ARIYAN BIKE GAME - Step 8: Basic roadside environment
+// ARIYAN BIKE GAME - Step 9: Roadside environment + collision data
 // Simple, lightweight scenery on both sides of the road:
 // trees, bushes, grass tufts, ground patches, rocks, lamp posts, marker posts.
-// Visual only: there is NO collision, the bike can pass through everything.
+//
+// Step 9: trees, rocks and lamp posts also create a simple round collision
+// shape (x, z, radius). The list is returned so main.js can check it.
+// Bushes, grass, patches and marker posts have NO collision.
 //
 // Performance: each kind of object is drawn with an InstancedMesh, which draws
 // many copies of one shape in a single draw call.
@@ -23,6 +25,11 @@ const LAMP_SPACING = 40;            // distance between lamp posts
 const LAMP_HEIGHT = 6;
 const MARKER_SPACING = 25;          // distance between road-edge marker posts
 
+// Collision sizes (radius on the ground, in units)
+const TREE_COLLISION_FACTOR = 0.4;  // tree radius = this x tree size (trunk is about 0.3 x size)
+const ROCK_COLLISION_FACTOR = 0.9;  // rock radius = this x rock size
+const LAMP_COLLISION_RADIUS = 0.25; // lamp post radius
+
 // Small seeded random number generator (mulberry32)
 function createSeededRandom(seed) {
   let a = seed;
@@ -35,10 +42,14 @@ function createSeededRandom(seed) {
   };
 }
 
+// Returns a list of collision circles: [{ x, z, r }, ...]
 export function createRoadsideEnvironment(scene, roadWidth) {
   const roadHalfWidth = roadWidth / 2;
   const random = createSeededRandom(20240607);
   const sides = [-1, 1]; // -1 = left of the road, +1 = right of the road
+
+  // Collision circles for trees, rocks and lamp posts
+  const obstacles = [];
 
   // Helpers for placing many copies of one shape
   const dummy = new THREE.Object3D();
@@ -111,13 +122,16 @@ export function createRoadsideEnvironment(scene, roadWidth) {
         const color = roundColors[Math.floor(random() * roundColors.length)];
         addInstance(roundFoliage, x, trunkHeight + size, z, 1.4 * size, 1.3 * size, 1.4 * size, rotY, color);
       }
+
+      // Collision: a circle around the trunk
+      obstacles.push({ x: x, z: z, r: size * TREE_COLLISION_FACTOR });
     }
   });
   finishInstances(trunks);
   finishInstances(pineFoliage);
   finishInstances(roundFoliage);
 
-  // ----- Bushes (low, flattened green spheres) -----
+  // ----- Bushes (low, flattened green spheres) - NO collision -----
   const bushes = makeInstanced(sphereGeometry, colorMaterial, BUSHES_PER_SIDE * 2);
   const bushColors = [0x3c7a35, 0x4d8c3f, 0x2f6b30, 0x5a9a48];
   const bushSlot = (ENV_EDGE * 2) / BUSHES_PER_SIDE;
@@ -133,7 +147,7 @@ export function createRoadsideEnvironment(scene, roadWidth) {
   });
   finishInstances(bushes);
 
-  // ----- Ground patches (flat circles of slightly different green) -----
+  // ----- Ground patches (flat circles of slightly different green) - NO collision -----
   const patchGeometry = new THREE.CircleGeometry(1, 12);
   patchGeometry.rotateX(-Math.PI / 2); // lay it flat
   const patchMaterial = new THREE.MeshStandardMaterial({
@@ -156,7 +170,7 @@ export function createRoadsideEnvironment(scene, roadWidth) {
   }
   finishInstances(patches);
 
-  // ----- Grass tufts (tiny thin cones) -----
+  // ----- Grass tufts (tiny thin cones) - NO collision -----
   const tuftGeometry = new THREE.ConeGeometry(0.1, 0.5, 4);
   tuftGeometry.translate(0, 0.25, 0);
   const tufts = makeInstanced(tuftGeometry, colorMaterial, GRASS_TUFTS);
@@ -183,6 +197,9 @@ export function createRoadsideEnvironment(scene, roadWidth) {
       const size = 0.4 + random() * 0.8;
       const color = rockColors[Math.floor(random() * rockColors.length)];
       addInstance(rocks, x, size * 0.3, z, size, size * 0.6, size, random() * Math.PI * 2, color);
+
+      // Collision: a circle around the rock
+      obstacles.push({ x: x, z: z, r: size * ROCK_COLLISION_FACTOR });
     }
   });
   finishInstances(rocks);
@@ -207,12 +224,15 @@ export function createRoadsideEnvironment(scene, roadWidth) {
       addInstance(poles, side * 7.5, 0, z, 1, LAMP_HEIGHT, 1, 0);
       // The light head reaches over toward the road
       addInstance(lampHeads, side * 7.0, LAMP_HEIGHT, z, 1, 1, 1, 0);
+
+      // Collision: a small circle around the pole
+      obstacles.push({ x: side * 7.5, z: z, r: LAMP_COLLISION_RADIUS });
     }
   });
   finishInstances(poles);
   finishInstances(lampHeads);
 
-  // ----- Road-edge marker posts (small white posts just outside the road) -----
+  // ----- Road-edge marker posts (small white posts just outside the road) - NO collision -----
   const markerCapacity = (Math.floor((ENV_EDGE * 2) / MARKER_SPACING) + 2) * 2;
   const markerGeometry = new THREE.BoxGeometry(0.12, 0.8, 0.12);
   markerGeometry.translate(0, 0.4, 0);
@@ -228,4 +248,6 @@ export function createRoadsideEnvironment(scene, roadWidth) {
     }
   });
   finishInstances(markers);
+
+  return obstacles;
 }
