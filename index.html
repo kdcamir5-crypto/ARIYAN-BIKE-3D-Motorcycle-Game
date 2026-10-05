@@ -1,1 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ARIYAN BIKE GAME</title>
 
+  <!-- Page styling -->
+  <link rel="stylesheet" href="./css/style.css">
+
+  <!-- Tells the browser where to find Three.js (loaded from CDN) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- The 3D canvas will be placed inside this container by js/main.js -->
+  <div id="game-container"></div>
+
+  <!-- Main game script -->
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
