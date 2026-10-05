@@ -7,6 +7,11 @@
 // and the animation loop.
 
 import * as THREE from 'three';
+import {
+    initAudio,
+    startEngineSound,
+    updateEngineSound
+} from './audio.js';
 
 // ---------- Renderer (WebGL) ----------
 const container = document.getElementById('game-container');
@@ -328,6 +333,8 @@ function getControlFromKey(code) {
 }
 
 window.addEventListener('keydown', (event) => {
+  initAudio();
+startEngineSound();
   const control = getControlFromKey(event.code);
   if (control) {
     keys[control] = true;
@@ -374,6 +381,8 @@ touchButtons.forEach((button) => {
 
   function press(event) {
     event.preventDefault();
+    initAudio();
+startEngineSound();
     activePointerId = event.pointerId;
     keys[control] = true;
     button.classList.add('active');
@@ -657,6 +666,7 @@ function animate() {
   updateMotorcycleVisuals(delta);
   updateFollowCamera(delta);
   updateSpeedometer();
+  updateEngineSound(currentSpeed);
   renderer.render(scene, camera);
 }
 animate();
