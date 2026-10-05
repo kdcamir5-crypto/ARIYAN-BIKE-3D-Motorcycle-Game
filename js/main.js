@@ -615,7 +615,25 @@ function updateFollowCamera(delta) {
   currentLookTarget.lerp(desiredLookTarget, smoothing);
   camera.lookAt(currentLookTarget);
 }
+// ---------- Speedometer (display only) ----------
+// Reads the bike's existing currentSpeed. It never changes the movement.
+const KMH_PER_UNIT = 6.5;   // 1 world unit per second shown as 6.5 km/h (top speed 18 -> about 117 km/h)
 
+const speedometerValue = document.getElementById('speedometer-value');
+let displayedSpeed = -1;    // the number currently shown (-1 forces the first update)
+
+function updateSpeedometer() {
+  if (!speedometerValue) return;
+
+  // Absolute value: the number is the speed, not the direction
+  const kmh = Math.round(Math.abs(currentSpeed) * KMH_PER_UNIT);
+
+  // Only touch the page when the shown number really changes
+  if (kmh !== displayedSpeed) {
+    displayedSpeed = kmh;
+    speedometerValue.textContent = String(kmh);
+  }
+}
 // ---------- Resize handling (desktop + mobile) ----------
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -638,7 +656,8 @@ function animate() {
   updateMotorcycle(delta);
   updateMotorcycleVisuals(delta);
   updateFollowCamera(delta);
-
+  updateFollowCamera(delta);
+  updateSpeedometer();
   renderer.render(scene, camera);
 }
 animate();
