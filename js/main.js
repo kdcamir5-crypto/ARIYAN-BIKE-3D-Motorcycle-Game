@@ -1,16 +1,11 @@
-// ARIYAN BIKE GAME - Step 7: First proper road
-// This file sets up the scene, camera, lights, renderer, a large bounded
-// ground with visible boundary walls, one long straight road with edge lines
-// and a dashed center line, a temporary placeholder motorcycle
-// (made of simple shapes), keyboard controls with smooth acceleration/braking,
-// rotating wheels, a small visual lean when turning, a smooth follow camera
-// and the animation loop.
+// ARIYAN BIKE GAME - main game file
+// Includes: scene, camera, lights, renderer, large bounded ground with walls,
+// one long road, roadside environment (loaded from environment.js) with
+// collision, a temporary placeholder motorcycle, keyboard + touch controls,
+// acceleration/braking, rotating wheels, visual lean, follow camera,
+// speedometer and engine sound.
 
 import * as THREE from 'three';
-import {
-    initAudio,
-    startEngineSound,
-} from './audio.js';
 
 // ---------- Renderer (WebGL) ----------
 const container = document.getElementById('game-container');
@@ -118,6 +113,7 @@ createBoundaryWalls();
 // they do not flicker against each other.
 function createRoad() {
   const roadGroup = new THREE.Group();
+
   // Dark asphalt-like surface
   const asphaltMaterial = new THREE.MeshStandardMaterial({
     color: 0x2b2b2e,
@@ -173,7 +169,10 @@ function createRoad() {
   scene.add(roadGroup);
 }
 createRoad();
+
+// ---------- Roadside environment (loaded from js/environment.js) ----------
 // List of collision circles (trees, rocks, lamp posts). Filled when environment.js loads.
+// If environment.js fails, the rest of the game still works.
 let obstacles = [];
 
 import('./environment.js')
@@ -181,6 +180,7 @@ import('./environment.js')
     obstacles = module.createRoadsideEnvironment(scene, ROAD_WIDTH);
   })
   .catch((error) => console.error('Roadside environment failed:', error));
+
 // ---------- Temporary placeholder motorcycle ----------
 // Built only from simple shapes. This is NOT the final motorcycle model.
 // The bike faces the -Z direction (its front points away from the camera).
@@ -332,8 +332,6 @@ function getControlFromKey(code) {
 }
 
 window.addEventListener('keydown', (event) => {
-  initAudio();
-startEngineSound();
   const control = getControlFromKey(event.code);
   if (control) {
     keys[control] = true;
@@ -356,6 +354,7 @@ window.addEventListener('blur', () => {
   keys.left = false;
   keys.right = false;
 });
+
 // ---------- Touch controls (on-screen buttons) ----------
 // The buttons simply set the same "keys" values as the keyboard,
 // so the existing movement system is not changed at all.
@@ -380,8 +379,6 @@ touchButtons.forEach((button) => {
 
   function press(event) {
     event.preventDefault();
-    initAudio();
-startEngineSound();
     activePointerId = event.pointerId;
     keys[control] = true;
     button.classList.add('active');
@@ -411,6 +408,7 @@ window.addEventListener('blur', releaseAllTouchButtons);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) releaseAllTouchButtons();
 });
+
 // ---------- Movement settings (easy to adjust later) ----------
 // All speeds are in "units per second".
 // All accelerations are in "units per second, every second".
@@ -426,6 +424,7 @@ const WALL_BRAKING = 40;            // how fast the bike loses speed while press
 const BIKE_COLLISION_RADIUS = 0.4;  // size of each collision circle on the bike
 const BIKE_COLLISION_OFFSET = 0.8;  // front and rear circles are this far from the bike center
 const OBSTACLE_BRAKING = 40;        // how fast the bike loses speed while pressed against an obstacle
+
 // ---------- Visual lean settings (easy to adjust later) ----------
 const MAX_LEAN_ANGLE = 0.2;         // maximum lean in radians (about 11.5 degrees)
 const LEAN_SMOOTHING = 8;           // higher = leans and returns upright faster
@@ -489,6 +488,7 @@ function updateMotorcycle(delta) {
     moveDirection.set(0, 0, -1).applyQuaternion(motorcycle.quaternion);
     motorcycle.position.addScaledVector(moveDirection, currentSpeed * delta);
   }
+
   // ----- Obstacle collision: trees, rocks and lamp posts -----
   // The bike is covered by 3 small circles (front, center, rear).
   // If a circle enters an obstacle circle, the bike is pushed back out.
@@ -533,6 +533,7 @@ function updateMotorcycle(delta) {
       currentSpeed = moveToward(currentSpeed, 0, OBSTACLE_BRAKING * delta);
     }
   }
+
   // ----- Boundary: keep the bike inside the playable area -----
   // If the bike went past a limit, put it back on the limit and
   // quickly (but smoothly) take away its speed.
@@ -623,6 +624,7 @@ function updateFollowCamera(delta) {
   currentLookTarget.lerp(desiredLookTarget, smoothing);
   camera.lookAt(currentLookTarget);
 }
+
 // ---------- Speedometer (display only) ----------
 // Reads the bike's existing currentSpeed. It never changes the movement.
 const KMH_PER_UNIT = 6.5;   // 1 world unit per second shown as 6.5 km/h (top speed 18 -> about 117 km/h)
@@ -642,6 +644,7 @@ function updateSpeedometer() {
     speedometerValue.textContent = String(kmh);
   }
 }
+
 // ---------- Engine sound ----------
 // Uses the Web Audio API so the engine loop is seamless and the pitch/volume
 // can change smoothly. It only READS the bike's speed and key state.
@@ -769,6 +772,7 @@ function updateEngineSound() {
   engineSource.playbackRate.setTargetAtTime(targetRate, now, ENGINE_SMOOTH_TIME);
   engineGain.gain.setTargetAtTime(targetVolume, now, ENGINE_SMOOTH_TIME);
 }
+
 // ---------- Resize handling (desktop + mobile) ----------
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -793,6 +797,7 @@ function animate() {
   updateFollowCamera(delta);
   updateSpeedometer();
   updateEngineSound();
+
   renderer.render(scene, camera);
 }
 animate();
