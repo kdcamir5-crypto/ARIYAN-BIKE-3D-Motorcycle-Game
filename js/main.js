@@ -1,7 +1,8 @@
-// ARIYAN BIKE GAME - Step 4: Acceleration and braking
+// ARIYAN BIKE GAME - Step 5: Wheel rotation and basic visual lean
 // This file sets up the scene, camera, lights, renderer, a temporary
 // placeholder motorcycle (made of simple shapes), keyboard controls with
-// smooth acceleration/braking, a smooth follow camera and the animation loop.
+// smooth acceleration/braking, rotating wheels, a small visual lean when
+// turning, a smooth follow camera and the animation loop.
 
 import * as THREE from 'three';
 
@@ -46,59 +47,83 @@ scene.add(ground);
 // ---------- Temporary placeholder motorcycle ----------
 // Built only from simple shapes. This is NOT the final motorcycle model.
 // The bike faces the -Z direction (its front points away from the camera).
+//
+// Structure (hierarchy):
+//   root          -> moved and turned by the game (position + direction)
+//     visual      -> leans left/right (visual only)
+//       wheel pivots (rotate around the axle) + all the other bike parts
+const WHEEL_RADIUS = 0.4;
+
 function createPlaceholderMotorcycle() {
-  const bike = new THREE.Group();
+  const root = new THREE.Group();   // movement / direction
+  const visual = new THREE.Group(); // visual lean only
+  root.add(visual);
 
   // Materials
   const blackMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
   const redMaterial = new THREE.MeshStandardMaterial({ color: 0xd62828 });
   const greyMaterial = new THREE.MeshStandardMaterial({ color: 0x777777 });
+  const spokeMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
   const lightMaterial = new THREE.MeshStandardMaterial({
     color: 0xfff3b0,
     emissive: 0xfff3b0,
     emissiveIntensity: 0.4
   });
 
-  const wheelRadius = 0.4;
+  // --- Wheels ---
+  // Each wheel sits inside a "pivot" group placed at the wheel's center.
+  // Spinning the pivot around the X axis (the axle) rotates only that wheel.
+  const wheelGeometry = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.18, 24);
+  const spokeGeometryA = new THREE.BoxGeometry(0.2, WHEEL_RADIUS * 1.7, 0.06);
+  const spokeGeometryB = new THREE.BoxGeometry(0.2, 0.06, WHEEL_RADIUS * 1.7);
 
-  // --- Wheels (cylinders turned sideways) ---
-  const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.18, 24);
+  function createWheelPivot(zPosition) {
+    const pivot = new THREE.Group();
+    pivot.position.set(0, WHEEL_RADIUS, zPosition);
 
-  const frontWheel = new THREE.Mesh(wheelGeometry, blackMaterial);
-  frontWheel.rotation.z = Math.PI / 2; // axle along the X direction
-  frontWheel.position.set(0, wheelRadius, -0.9);
-  bike.add(frontWheel);
+    // The tire (cylinder turned sideways so the axle runs along X)
+    const tire = new THREE.Mesh(wheelGeometry, blackMaterial);
+    tire.rotation.z = Math.PI / 2;
+    pivot.add(tire);
 
-  const rearWheel = new THREE.Mesh(wheelGeometry, blackMaterial);
-  rearWheel.rotation.z = Math.PI / 2;
-  rearWheel.position.set(0, wheelRadius, 0.9);
-  bike.add(rearWheel);
+    // Two light spokes (a cross) so the rotation is visible
+    pivot.add(new THREE.Mesh(spokeGeometryA, spokeMaterial));
+    pivot.add(new THREE.Mesh(spokeGeometryB, spokeMaterial));
+
+    return pivot;
+  }
+
+  const frontWheelPivot = createWheelPivot(-0.9);
+  visual.add(frontWheelPivot);
+
+  const rearWheelPivot = createWheelPivot(0.9);
+  visual.add(rearWheelPivot);
 
   // --- Main body / frame ---
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.25, 1.5), greyMaterial);
   body.position.set(0, 0.65, 0.1);
-  bike.add(body);
+  visual.add(body);
 
   // --- Engine block ---
   const engine = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.35, 0.5), blackMaterial);
   engine.position.set(0, 0.5, 0);
-  bike.add(engine);
+  visual.add(engine);
 
   // --- Fuel tank ---
   const tank = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.3, 0.6), redMaterial);
   tank.position.set(0, 0.95, -0.3);
-  bike.add(tank);
+  visual.add(tank);
 
   // --- Seat ---
   const seat = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.7), blackMaterial);
   seat.position.set(0, 0.88, 0.4);
-  bike.add(seat);
+  visual.add(seat);
 
   // --- Front fork (tilted slightly backward at the top) ---
   const fork = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.8, 0.07), greyMaterial);
   fork.position.set(0, 0.78, -0.8);
   fork.rotation.x = 0.26;
-  bike.add(fork);
+  visual.add(fork);
 
   // --- Handlebar ---
   const handlebar = new THREE.Mesh(
@@ -107,12 +132,12 @@ function createPlaceholderMotorcycle() {
   );
   handlebar.rotation.z = Math.PI / 2; // lay it sideways
   handlebar.position.set(0, 1.18, -0.7);
-  bike.add(handlebar);
+  visual.add(handlebar);
 
   // --- Headlight ---
   const headlight = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), lightMaterial);
   headlight.position.set(0, 1.0, -0.98);
-  bike.add(headlight);
+  visual.add(headlight);
 
   // --- Exhaust pipe ---
   const exhaust = new THREE.Mesh(
@@ -121,12 +146,21 @@ function createPlaceholderMotorcycle() {
   );
   exhaust.rotation.x = Math.PI / 2; // lay it along the Z direction
   exhaust.position.set(0.25, 0.4, 0.6);
-  bike.add(exhaust);
+  visual.add(exhaust);
 
-  return bike;
+  return { root, visual, frontWheelPivot, rearWheelPivot };
 }
 
-const motorcycle = createPlaceholderMotorcycle();
+const bikeParts = createPlaceholderMotorcycle();
+
+// "motorcycle" is the main object: it controls position and facing direction.
+// The camera follows this object.
+const motorcycle = bikeParts.root;
+// "bikeVisual" is only used for the visual lean.
+const bikeVisual = bikeParts.visual;
+const frontWheelPivot = bikeParts.frontWheelPivot;
+const rearWheelPivot = bikeParts.rearWheelPivot;
+
 motorcycle.position.set(0, 0, 0);
 scene.add(motorcycle);
 
@@ -193,9 +227,17 @@ const BRAKING_DECELERATION = 14;    // how fast speed drops when the opposite ke
 const COASTING_DECELERATION = 5;    // how fast the bike slows down when no key is pressed
 const TURN_SPEED = 1.2;             // radians per second
 
+// ---------- Visual lean settings (easy to adjust later) ----------
+const MAX_LEAN_ANGLE = 0.2;         // maximum lean in radians (about 11.5 degrees)
+const LEAN_SMOOTHING = 8;           // higher = leans and returns upright faster
+
 // The bike's current speed.
 // Positive = moving forward, negative = moving backward, 0 = stopped.
 let currentSpeed = 0;
+
+// The bike's current visual lean (radians).
+// Positive = leaning left, negative = leaning right, 0 = upright.
+let currentLean = 0;
 
 // Reused each frame so we don't create new objects constantly
 const moveDirection = new THREE.Vector3();
@@ -251,6 +293,35 @@ function updateMotorcycle(delta) {
 
   // The bike stays on the ground (height is never changed)
   motorcycle.position.y = 0;
+}
+
+// ---------- Visual effects: wheel rotation and lean ----------
+// These only change how the bike LOOKS. They never change its movement.
+function updateMotorcycleVisuals(delta) {
+  // ----- Wheel rotation -----
+  // Distance travelled this frame divided by the wheel radius gives the
+  // exact angle a rolling wheel turns. Negative because the bike faces -Z:
+  // rolling forward means the top of the wheel moves toward -Z.
+  const wheelAngle = -(currentSpeed * delta) / WHEEL_RADIUS;
+  frontWheelPivot.rotation.x += wheelAngle;
+  rearWheelPivot.rotation.x += wheelAngle;
+
+  // ----- Visual lean -----
+  // Left key = lean left (positive), right key = lean right (negative).
+  // If both or neither are pressed, the target is upright (0).
+  let targetLean = 0;
+  if (keys.left && !keys.right) targetLean = MAX_LEAN_ANGLE;
+  if (keys.right && !keys.left) targetLean = -MAX_LEAN_ANGLE;
+
+  // Smoothly move the current lean toward the target (works at any frame rate)
+  const leanBlend = 1 - Math.exp(-LEAN_SMOOTHING * delta);
+  currentLean += (targetLean - currentLean) * leanBlend;
+
+  // Safety: the lean can never go beyond the limit
+  currentLean = Math.max(-MAX_LEAN_ANGLE, Math.min(MAX_LEAN_ANGLE, currentLean));
+
+  // Apply the lean only to the visual group (not to the main motorcycle object)
+  bikeVisual.rotation.z = currentLean;
 }
 
 // ---------- Follow camera ----------
@@ -312,6 +383,7 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.1);
 
   updateMotorcycle(delta);
+  updateMotorcycleVisuals(delta);
   updateFollowCamera(delta);
 
   renderer.render(scene, camera);
