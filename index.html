@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ARIYAN BIKE GAME</title>
 
   <!-- Page styling -->
@@ -20,6 +20,18 @@
 <body>
   <!-- The 3D canvas will be placed inside this container by js/main.js -->
   <div id="game-container"></div>
+
+  <!-- On-screen touch controls (shown on touch devices / small screens) -->
+  <div id="touch-controls">
+    <div class="touch-group touch-steer">
+      <button type="button" class="touch-btn" data-control="left" aria-label="Turn left">&#9664;</button>
+      <button type="button" class="touch-btn" data-control="right" aria-label="Turn right">&#9654;</button>
+    </div>
+    <div class="touch-group touch-drive">
+      <button type="button" class="touch-btn" data-control="forward" aria-label="Accelerate">&#9650;</button>
+      <button type="button" class="touch-btn" data-control="backward" aria-label="Reverse or brake">&#9660;</button>
+    </div>
+  </div>
 
   <!-- Main game script -->
   <script type="module" src="./js/main.js"></script>
