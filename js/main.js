@@ -648,7 +648,7 @@ function updateSpeedometer() {
 // ---------- Engine sound ----------
 // Uses the Web Audio API so the engine loop is seamless and the pitch/volume
 // can change smoothly. It only READS the bike's speed and key state.
-const ENGINE_SOUND_PATH = './sound/engine/engine.mp3'; // relative path (GitHub Pages)
+const ENGINE_SOUND_PATH = './sound/engine.mp3'; // relative path (GitHub Pages)
 
 const ENGINE_IDLE_RATE = 0.8;       // pitch when the bike is standing still
 const ENGINE_MAX_RATE = 1.8;        // pitch at top speed
