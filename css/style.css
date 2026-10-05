@@ -251,3 +251,46 @@ body.touch-device #touch-controls {
     right: calc(8px + env(safe-area-inset-right, 0px));
   }
 }
+
+/* ---------- Throttle zone (invisible) + tilt message ---------- */
+
+#throttle-zone {
+  display: none;
+  position: fixed;
+  left: 8%;
+  right: 8%;
+  top: 14%;
+  bottom: 0;
+  z-index: 5;                 /* below the brake/reverse buttons (10) and sound button (11) */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.touch-device #throttle-zone {
+  display: block;
+}
+
+#tilt-message {
+  position: fixed;
+  left: 50%;
+  top: calc(70px + env(safe-area-inset-top, 0px));
+  transform: translateX(-50%);
+  max-width: 80%;
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: rgba(15, 15, 25, 0.82);
+  color: #ffffff;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  pointer-events: none;
+  z-index: 12;
+}
+
+#tilt-message[hidden] {
+  display: none;
+}
