@@ -1,8 +1,7 @@
-// ARIYAN BIKE GAME - Step 8: Basic roadside environment
+// ARIYAN BIKE GAME - Step 7: First proper road
 // This file sets up the scene, camera, lights, renderer, a large bounded
 // ground with visible boundary walls, one long straight road with edge lines
-// and a dashed center line, simple roadside objects (trees, bushes, grass,
-// lamp posts, rocks, marker posts), a temporary placeholder motorcycle
+// and a dashed center line, a temporary placeholder motorcycle
 // (made of simple shapes), keyboard controls with smooth acceleration/braking,
 // rotating wheels, a small visual lean when turning, a smooth follow camera
 // and the animation loop.
@@ -172,168 +171,369 @@ function createRoad() {
 }
 createRoad();
 
-// ---------- Roadside environment ----------
-// Simple, lightweight scenery on both sides of the road.
-// Visual only: there is NO collision, the bike can pass through everything.
+// ---------- Temporary placeholder motorcycle ----------
+// Built only from simple shapes. This is NOT the final motorcycle model.
+// The bike faces the -Z direction (its front points away from the camera).
 //
-// Performance: each kind of object is drawn with an InstancedMesh, which draws
-// many copies of one shape in a single draw call. The whole environment is
-// only about 20 draw calls.
-//
-// Placement is deterministic: a seeded random generator always gives the
-// same numbers, so the world looks identical every time the page opens.
+// Structure (hierarchy):
+//   root          -> moved and turned by the game (position + direction)
+//     visual      -> leans left/right (visual only)
+//       wheel pivots (rotate around the axle) + all the other bike parts
+const WHEEL_RADIUS = 0.4;
 
-// Environment settings (easy to adjust later)
-const ENV_EDGE = 285;               // objects are placed between -285 and +285 along the road
-const ROAD_HALF_WIDTH = ROAD_WIDTH / 2;
-const TREES_PER_SIDE = 50;
-const BUSHES_PER_SIDE = 60;
-const GRASS_TUFTS = 260;
-const GROUND_PATCHES = 50;
-const ROCKS_PER_SIDE = 20;
-const LAMP_SPACING = 40;            // distance between lamp posts
-const MARKER_SPACING = 25;          // distance between road-edge marker posts
+function createPlaceholderMotorcycle() {
+  const root = new THREE.Group();   // movement / direction
+  const visual = new THREE.Group(); // visual lean only
+  root.add(visual);
 
-// Small seeded random number generator (mulberry32)
-function createSeededRandom(seed) {
-  let a = seed;
-  return function () {
-    a |= 0;
-    a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+  // Materials
+  const blackMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+  const redMaterial = new THREE.MeshStandardMaterial({ color: 0xd62828 });
+  const greyMaterial = new THREE.MeshStandardMaterial({ color: 0x777777 });
+  const spokeMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+  const lightMaterial = new THREE.MeshStandardMaterial({
+    color: 0xfff3b0,
+    emissive: 0xfff3b0,
+    emissiveIntensity: 0.4
+  });
 
-// Helpers for placing many copies of one shape
-const envDummy = new THREE.Object3D();
-const envColor = new THREE.Color();
+  // --- Wheels ---
+  // Each wheel sits inside a "pivot" group placed at the wheel's center.
+  // Spinning the pivot around the X axis (the axle) rotates only that wheel.
+  const wheelGeometry = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.18, 24);
+  const spokeGeometryA = new THREE.BoxGeometry(0.2, WHEEL_RADIUS * 1.7, 0.06);
+  const spokeGeometryB = new THREE.BoxGeometry(0.2, 0.06, WHEEL_RADIUS * 1.7);
 
-function makeInstanced(geometry, material, capacity) {
-  const mesh = new THREE.InstancedMesh(geometry, material, capacity);
-  mesh.count = 0; // grows as instances are added
-  mesh.frustumCulled = false; // cheap enough, avoids objects popping out at screen edges
-  scene.add(mesh);
-  return mesh;
-}
+  function createWheelPivot(zPosition) {
+    const pivot = new THREE.Group();
+    pivot.position.set(0, WHEEL_RADIUS, zPosition);
 
-function addInstance(mesh, x, y, z, sx, sy, sz, rotY, colorHex) {
-  envDummy.position.set(x, y, z);
-  envDummy.rotation.set(0, rotY, 0);
-  envDummy.scale.set(sx, sy, sz);
-  envDummy.updateMatrix();
-  const index = mesh.count;
-  mesh.setMatrixAt(index, envDummy.matrix);
-  if (colorHex !== undefined) {
-    mesh.setColorAt(index, envColor.setHex(colorHex));
+    // The tire (cylinder turned sideways so the axle runs along X)
+    const tire = new THREE.Mesh(wheelGeometry, blackMaterial);
+    tire.rotation.z = Math.PI / 2;
+    pivot.add(tire);
+
+    // Two light spokes (a cross) so the rotation is visible
+    pivot.add(new THREE.Mesh(spokeGeometryA, spokeMaterial));
+    pivot.add(new THREE.Mesh(spokeGeometryB, spokeMaterial));
+
+    return pivot;
   }
-  mesh.count = index + 1;
+
+  const frontWheelPivot = createWheelPivot(-0.9);
+  visual.add(frontWheelPivot);
+
+  const rearWheelPivot = createWheelPivot(0.9);
+  visual.add(rearWheelPivot);
+
+  // --- Main body / frame ---
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.25, 1.5), greyMaterial);
+  body.position.set(0, 0.65, 0.1);
+  visual.add(body);
+
+  // --- Engine block ---
+  const engine = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.35, 0.5), blackMaterial);
+  engine.position.set(0, 0.5, 0);
+  visual.add(engine);
+
+  // --- Fuel tank ---
+  const tank = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.3, 0.6), redMaterial);
+  tank.position.set(0, 0.95, -0.3);
+  visual.add(tank);
+
+  // --- Seat ---
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.7), blackMaterial);
+  seat.position.set(0, 0.88, 0.4);
+  visual.add(seat);
+
+  // --- Front fork (tilted slightly backward at the top) ---
+  const fork = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.8, 0.07), greyMaterial);
+  fork.position.set(0, 0.78, -0.8);
+  fork.rotation.x = 0.26;
+  visual.add(fork);
+
+  // --- Handlebar ---
+  const handlebar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.03, 0.8, 12),
+    blackMaterial
+  );
+  handlebar.rotation.z = Math.PI / 2; // lay it sideways
+  handlebar.position.set(0, 1.18, -0.7);
+  visual.add(handlebar);
+
+  // --- Headlight ---
+  const headlight = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), lightMaterial);
+  headlight.position.set(0, 1.0, -0.98);
+  visual.add(headlight);
+
+  // --- Exhaust pipe ---
+  const exhaust = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.05, 0.9, 12),
+    greyMaterial
+  );
+  exhaust.rotation.x = Math.PI / 2; // lay it along the Z direction
+  exhaust.position.set(0.25, 0.4, 0.6);
+  visual.add(exhaust);
+
+  return { root, visual, frontWheelPivot, rearWheelPivot };
 }
 
-function finishInstances(mesh) {
-  mesh.instanceMatrix.needsUpdate = true;
-  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-}
+const bikeParts = createPlaceholderMotorcycle();
 
-function createRoadsideEnvironment() {
-  const random = createSeededRandom(20240607);
-  const sides = [-1, 1]; // -1 = left of the road, +1 = right of the road
+// "motorcycle" is the main object: it controls position and facing direction.
+// The camera follows this object.
+const motorcycle = bikeParts.root;
+// "bikeVisual" is only used for the visual lean.
+const bikeVisual = bikeParts.visual;
+const frontWheelPivot = bikeParts.frontWheelPivot;
+const rearWheelPivot = bikeParts.rearWheelPivot;
 
-  // Shared materials (white base so each instance can have its own color)
-  const colorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
-  const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x6b4423, flatShading: true });
+// The bike starts at the center of the road, facing along it (-Z direction)
+motorcycle.position.set(0, 0, 0);
+scene.add(motorcycle);
 
-  // ----- Trees -----
-  // Trunk (brown cylinder) + foliage (green cone "pine" or green sphere "round").
-  const treeCapacity = TREES_PER_SIDE * 2;
-  const trunkGeometry = new THREE.CylinderGeometry(0.22, 0.32, 1, 8);
-  trunkGeometry.translate(0, 0.5, 0); // base of the trunk sits at y = 0
-  const coneGeometry = new THREE.ConeGeometry(1, 1, 8);
-  coneGeometry.translate(0, 0.5, 0);  // base of the cone sits at y = 0
-  const sphereGeometry = new THREE.SphereGeometry(1, 8, 6);
+// ---------- Keyboard input ----------
+// Remembers which control keys are being held down right now.
+const keys = {
+  forward: false,
+  backward: false,
+  left: false,
+  right: false
+};
 
-  const trunks = makeInstanced(trunkGeometry, trunkMaterial, treeCapacity);
-  const pineFoliage = makeInstanced(coneGeometry, colorMaterial, treeCapacity);
-  const roundFoliage = makeInstanced(sphereGeometry, colorMaterial, treeCapacity);
-
-  const pineColors = [0x2d6a3e, 0x1f5a33, 0x356f45];
-  const roundColors = [0x3f8f3a, 0x4a9a44, 0x2f7d32];
-  const slotLength = (ENV_EDGE * 2) / TREES_PER_SIDE;
-
-  sides.forEach((side) => {
-    for (let i = 0; i < TREES_PER_SIDE; i++) {
-      const z = -ENV_EDGE + (i + random()) * slotLength;
-      const x = side * (10 + random() * 35);   // always at least 10 from the center = beside the road
-      const size = 0.8 + random() * 0.9;       // different sizes
-      const rotY = random() * Math.PI * 2;
-      const isPine = random() < 0.5;
-      const trunkHeight = 2 * size;
-
-      addInstance(trunks, x, 0, z, size, trunkHeight, size, rotY);
-
-      if (isPine) {
-        const color = pineColors[Math.floor(random() * pineColors.length)];
-        addInstance(pineFoliage, x, trunkHeight * 0.6, z, 1.5 * size, 4 * size, 1.5 * size, rotY, color);
-      } else {
-        const color = roundColors[Math.floor(random() * roundColors.length)];
-        addInstance(roundFoliage, x, trunkHeight + size, z, 1.4 * size, 1.3 * size, 1.4 * size, rotY, color);
-      }
-    }
-  });
-  finishInstances(trunks);
-  finishInstances(pineFoliage);
-  finishInstances(roundFoliage);
-
-  // ----- Bushes -----
-  // Low, flattened green spheres closer to the road.
-  const bushes = makeInstanced(sphereGeometry, colorMaterial, BUSHES_PER_SIDE * 2);
-  const bushColors = [0x3c7a35, 0x4d8c3f, 0x2f6b30, 0x5a9a48];
-  const bushSlot = (ENV_EDGE * 2) / BUSHES_PER_SIDE;
-
-  sides.forEach((side) => {
-    for (let i = 0; i < BUSHES_PER_SIDE; i++) {
-      const z = -ENV_EDGE + (i + random()) * bushSlot;
-      const x = side * (9 + random() * 14);
-      const size = 0.5 + random() * 0.55;
-      const color = bushColors[Math.floor(random() * bushColors.length)];
-      addInstance(bushes, x, size * 0.5, z, size, size * 0.7, size, random() * Math.PI * 2, color);
-    }
-  });
-  finishInstances(bushes);
-
-  // ----- Ground patches (flat circles of slightly different green) -----
-  const patchGeometry = new THREE.CircleGeometry(1, 12);
-  patchGeometry.rotateX(-Math.PI / 2); // lay it flat
-  const patchMaterial = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    polygonOffset: true,
-    polygonOffsetFactor: -0.5,
-    polygonOffsetUnits: -0.5
-  });
-  const patches = makeInstanced(patchGeometry, patchMaterial, GROUND_PATCHES);
-  const patchColors = [0x4f7045, 0x66905a, 0x5d8a50, 0x486a40];
-
-  for (let i = 0; i < GROUND_PATCHES; i++) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const radius = 3 + random() * 5;
-    // Placed so the patch never reaches onto the road
-    const x = side * (ROAD_HALF_WIDTH + 0.5 + radius + random() * 40);
-    const z = -ENV_EDGE + random() * ENV_EDGE * 2;
-    const color = patchColors[Math.floor(random() * patchColors.length)];
-    addInstance(patches, x, 0.012, z, radius, 1, radius, 0, color);
+// Connects keyboard keys to the controls above
+function getControlFromKey(code) {
+  switch (code) {
+    case 'KeyW':
+    case 'ArrowUp':
+      return 'forward';
+    case 'KeyS':
+    case 'ArrowDown':
+      return 'backward';
+    case 'KeyA':
+    case 'ArrowLeft':
+      return 'left';
+    case 'KeyD':
+    case 'ArrowRight':
+      return 'right';
+    default:
+      return null;
   }
-  finishInstances(patches);
+}
 
-  // ----- Grass tufts (tiny thin cones) -----
-  const tuftGeometry = new THREE.ConeGeometry(0.1, 0.5, 4);
-  tuftGeometry.translate(0, 0.25, 0);
-  const tufts = makeInstanced(tuftGeometry, colorMaterial, GRASS_TUFTS);
-  const tuftColors = [0x6f9a5a, 0x4e7a3f, 0x7fa862];
+window.addEventListener('keydown', (event) => {
+  const control = getControlFromKey(event.code);
+  if (control) {
+    keys[control] = true;
+    event.preventDefault(); // stop arrow keys from scrolling the page
+  }
+});
 
-  for (let i = 0; i < GRASS_TUFTS; i++) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const x = side * (7 + random() * 33);
-    const z = -ENV_EDGE + random() * ENV_EDGE * 2;
-    const height = 0.6 + random() * 1.0;
-    const color = tuftColors[Math.floor(random() *
+window.addEventListener('keyup', (event) => {
+  const control = getControlFromKey(event.code);
+  if (control) {
+    keys[control] = false;
+    event.preventDefault();
+  }
+});
+
+// If the browser tab loses focus, release all keys so the bike doesn't keep moving
+window.addEventListener('blur', () => {
+  keys.forward = false;
+  keys.backward = false;
+  keys.left = false;
+  keys.right = false;
+});
+
+// ---------- Movement settings (easy to adjust later) ----------
+// All speeds are in "units per second".
+// All accelerations are in "units per second, every second".
+const MAX_FORWARD_SPEED = 18;       // top speed going forward
+const MAX_REVERSE_SPEED = 5;        // top speed going backward (much slower)
+const ACCELERATION = 6;             // how fast speed builds up when W or S is held
+const BRAKING_DECELERATION = 14;    // how fast speed drops when the opposite key is pressed
+const COASTING_DECELERATION = 5;    // how fast the bike slows down when no key is pressed
+const TURN_SPEED = 1.2;             // radians per second
+const WALL_BRAKING = 40;            // how fast the bike loses speed while pressed against a wall
+
+// ---------- Visual lean settings (easy to adjust later) ----------
+const MAX_LEAN_ANGLE = 0.2;         // maximum lean in radians (about 11.5 degrees)
+const LEAN_SMOOTHING = 8;           // higher = leans and returns upright faster
+
+// The bike's current speed.
+// Positive = moving forward, negative = moving backward, 0 = stopped.
+let currentSpeed = 0;
+
+// The bike's current visual lean (radians).
+// Positive = leaning left, negative = leaning right, 0 = upright.
+let currentLean = 0;
+
+// Reused each frame so we don't create new objects constantly
+const moveDirection = new THREE.Vector3();
+
+// Moves a number toward a target value by at most "amount" (never overshoots)
+function moveToward(value, target, amount) {
+  if (value < target) return Math.min(value + amount, target);
+  if (value > target) return Math.max(value - amount, target);
+  return target;
+}
+
+function updateMotorcycle(delta) {
+  // ----- Turning: rotate around the vertical (Y) axis -----
+  // Allowed while stopped and while moving.
+  if (keys.left) {
+    motorcycle.rotation.y += TURN_SPEED * delta;
+  }
+  if (keys.right) {
+    motorcycle.rotation.y -= TURN_SPEED * delta;
+  }
+
+  // ----- Speed: acceleration, braking and slowing down -----
+  if (keys.forward && !keys.backward) {
+    if (currentSpeed < 0) {
+      // Moving backward but W is pressed: brake first
+      currentSpeed += BRAKING_DECELERATION * delta;
+    } else {
+      // Normal forward acceleration
+      currentSpeed += ACCELERATION * delta;
+    }
+  } else if (keys.backward && !keys.forward) {
+    if (currentSpeed > 0) {
+      // Moving forward but S is pressed: brake first
+      currentSpeed -= BRAKING_DECELERATION * delta;
+    } else {
+      // Normal reverse acceleration
+      currentSpeed -= ACCELERATION * delta;
+    }
+  } else {
+    // No key (or both keys): slowly roll to a stop
+    currentSpeed = moveToward(currentSpeed, 0, COASTING_DECELERATION * delta);
+  }
+
+  // Never go faster than the allowed top speeds
+  currentSpeed = Math.max(-MAX_REVERSE_SPEED, Math.min(MAX_FORWARD_SPEED, currentSpeed));
+
+  // ----- Moving: go along the direction the bike is currently facing -----
+  // The bike's front points to -Z in its own space.
+  if (currentSpeed !== 0) {
+    moveDirection.set(0, 0, -1).applyQuaternion(motorcycle.quaternion);
+    motorcycle.position.addScaledVector(moveDirection, currentSpeed * delta);
+  }
+
+  // ----- Boundary: keep the bike inside the playable area -----
+  // If the bike went past a limit, put it back on the limit and
+  // quickly (but smoothly) take away its speed.
+  const clampedX = THREE.MathUtils.clamp(motorcycle.position.x, -BIKE_LIMIT, BIKE_LIMIT);
+  const clampedZ = THREE.MathUtils.clamp(motorcycle.position.z, -BIKE_LIMIT, BIKE_LIMIT);
+  const hitBoundary =
+    clampedX !== motorcycle.position.x || clampedZ !== motorcycle.position.z;
+
+  motorcycle.position.x = clampedX;
+  motorcycle.position.z = clampedZ;
+
+  if (hitBoundary) {
+    currentSpeed = moveToward(currentSpeed, 0, WALL_BRAKING * delta);
+  }
+
+  // The bike stays on the ground (height is never changed)
+  motorcycle.position.y = 0;
+}
+
+// ---------- Visual effects: wheel rotation and lean ----------
+// These only change how the bike LOOKS. They never change its movement.
+function updateMotorcycleVisuals(delta) {
+  // ----- Wheel rotation -----
+  // Distance travelled this frame divided by the wheel radius gives the
+  // exact angle a rolling wheel turns. Negative because the bike faces -Z:
+  // rolling forward means the top of the wheel moves toward -Z.
+  const wheelAngle = -(currentSpeed * delta) / WHEEL_RADIUS;
+  frontWheelPivot.rotation.x += wheelAngle;
+  rearWheelPivot.rotation.x += wheelAngle;
+
+  // ----- Visual lean -----
+  // Left key = lean left (positive), right key = lean right (negative).
+  // If both or neither are pressed, the target is upright (0).
+  let targetLean = 0;
+  if (keys.left && !keys.right) targetLean = MAX_LEAN_ANGLE;
+  if (keys.right && !keys.left) targetLean = -MAX_LEAN_ANGLE;
+
+  // Smoothly move the current lean toward the target (works at any frame rate)
+  const leanBlend = 1 - Math.exp(-LEAN_SMOOTHING * delta);
+  currentLean += (targetLean - currentLean) * leanBlend;
+
+  // Safety: the lean can never go beyond the limit
+  currentLean = Math.max(-MAX_LEAN_ANGLE, Math.min(MAX_LEAN_ANGLE, currentLean));
+
+  // Apply the lean only to the visual group (not to the main motorcycle object)
+  bikeVisual.rotation.z = currentLean;
+}
+
+// ---------- Follow camera ----------
+// The camera sits behind and slightly above the motorcycle.
+// Offset is measured from the motorcycle: (x = side, y = up, z = behind)
+const cameraOffset = new THREE.Vector3(0, 2.2, 5);
+const cameraLookOffset = new THREE.Vector3(0, 0.9, 0); // point on the bike to look at
+
+const desiredCameraPosition = new THREE.Vector3();
+const desiredLookTarget = new THREE.Vector3();
+const currentLookTarget = new THREE.Vector3();
+
+const CAMERA_FOLLOW_SPEED = 5; // higher = camera follows more tightly
+
+function computeCameraTargets() {
+  // Make sure the bike's world position/rotation is up to date
+  motorcycle.updateMatrixWorld(true);
+
+  desiredCameraPosition.copy(cameraOffset);
+  motorcycle.localToWorld(desiredCameraPosition);
+
+  // Keep the camera inside the walls so it never ends up outside the game area
+  desiredCameraPosition.x = THREE.MathUtils.clamp(desiredCameraPosition.x, -CAMERA_LIMIT, CAMERA_LIMIT);
+  desiredCameraPosition.z = THREE.MathUtils.clamp(desiredCameraPosition.z, -CAMERA_LIMIT, CAMERA_LIMIT);
+
+  desiredLookTarget.copy(cameraLookOffset);
+  motorcycle.localToWorld(desiredLookTarget);
+}
+
+// Place the camera instantly at the start (no sliding)
+computeCameraTargets();
+camera.position.copy(desiredCameraPosition);
+currentLookTarget.copy(desiredLookTarget);
+camera.lookAt(currentLookTarget);
+
+function updateFollowCamera(delta) {
+  computeCameraTargets();
+
+  // Move smoothly toward the wanted position
+  const smoothing = 1 - Math.exp(-CAMERA_FOLLOW_SPEED * delta);
+  camera.position.lerp(desiredCameraPosition, smoothing);
+  currentLookTarget.lerp(desiredLookTarget, smoothing);
+  camera.lookAt(currentLookTarget);
+}
+
+// ---------- Resize handling (desktop + mobile) ----------
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+}
+window.addEventListener('resize', onWindowResize);
+window.addEventListener('orientationchange', onWindowResize);
+
+// ---------- Animation / render loop ----------
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Time since the last frame (limited so the bike never jumps after a pause)
+  const delta = Math.min(clock.getDelta(), 0.1);
+
+  updateMotorcycle(delta);
+  updateMotorcycleVisuals(delta);
+  updateFollowCamera(delta);
+
+  renderer.render(scene, camera);
+}
+animate();
