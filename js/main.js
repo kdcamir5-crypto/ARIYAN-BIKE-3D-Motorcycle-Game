@@ -1,8 +1,9 @@
-// ARIYAN BIKE GAME - Step 5: Wheel rotation and basic visual lean
-// This file sets up the scene, camera, lights, renderer, a temporary
-// placeholder motorcycle (made of simple shapes), keyboard controls with
-// smooth acceleration/braking, rotating wheels, a small visual lean when
-// turning, a smooth follow camera and the animation loop.
+// ARIYAN BIKE GAME - Step 6: Large bounded game area
+// This file sets up the scene, camera, lights, renderer, a large bounded
+// ground with visible boundary walls, a temporary placeholder motorcycle
+// (made of simple shapes), keyboard controls with smooth acceleration/braking,
+// rotating wheels, a small visual lean when turning, a smooth follow camera
+// and the animation loop.
 
 import * as THREE from 'three';
 
@@ -24,7 +25,7 @@ const camera = new THREE.PerspectiveCamera(
   60,                                      // field of view
   window.innerWidth / window.innerHeight,  // aspect ratio
   0.1,                                     // near limit
-  1000                                     // far limit
+  4000                                     // far limit (larger so the outer ground is visible)
 );
 
 // ---------- Lighting ----------
@@ -37,12 +38,64 @@ const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
 sunLight.position.set(10, 20, 10);
 scene.add(sunLight);
 
-// ---------- Temporary ground plane ----------
-const groundGeometry = new THREE.PlaneGeometry(200, 200);
+// ---------- Game area settings (easy to adjust later) ----------
+const GROUND_SIZE = 600;                 // playable area is 600 x 600 units
+const GROUND_HALF = GROUND_SIZE / 2;     // distance from the center to each edge
+const WALL_HEIGHT = 3;                   // how tall the boundary walls are
+const WALL_THICKNESS = 2;                // how thick the boundary walls are
+const BIKE_MARGIN = 1.5;                 // how close the bike center may get to a wall
+const CAMERA_MARGIN = 0.8;               // how close the camera may get to a wall
+
+// The bike's center must stay inside this limit
+const BIKE_LIMIT = GROUND_HALF - BIKE_MARGIN;
+// The camera must stay inside this limit
+const CAMERA_LIMIT = GROUND_HALF - CAMERA_MARGIN;
+
+// ---------- Playable ground ----------
+const groundGeometry = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
 const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x5a7d4f });
 const ground = new THREE.Mesh(groundGeometry, groundMaterial);
 ground.rotation.x = -Math.PI / 2; // lay it flat
 scene.add(ground);
+
+// ---------- Outer ground (outside the walls) ----------
+// A very large, darker plane so no empty sky-colored gap is seen below the horizon
+// when looking over or past the walls. The bike can never reach it.
+const outerGroundGeometry = new THREE.PlaneGeometry(8000, 8000);
+const outerGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x3b5236 });
+const outerGround = new THREE.Mesh(outerGroundGeometry, outerGroundMaterial);
+outerGround.rotation.x = -Math.PI / 2;
+outerGround.position.y = -0.05; // slightly below the playable ground
+scene.add(outerGround);
+
+// ---------- Boundary walls ----------
+// Four simple red boxes around the playable ground.
+function createBoundaryWalls() {
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xc0392b });
+  const wallLength = GROUND_SIZE + WALL_THICKNESS * 2; // long enough to close the corners
+  const wallOffset = GROUND_HALF + WALL_THICKNESS / 2; // wall center sits just outside the edge
+
+  // Front and back walls (run along the X direction)
+  const northSouthGeometry = new THREE.BoxGeometry(wallLength, WALL_HEIGHT, WALL_THICKNESS);
+  const frontWall = new THREE.Mesh(northSouthGeometry, wallMaterial);
+  frontWall.position.set(0, WALL_HEIGHT / 2, -wallOffset);
+  scene.add(frontWall);
+
+  const backWall = new THREE.Mesh(northSouthGeometry, wallMaterial);
+  backWall.position.set(0, WALL_HEIGHT / 2, wallOffset);
+  scene.add(backWall);
+
+  // Left and right walls (run along the Z direction)
+  const eastWestGeometry = new THREE.BoxGeometry(WALL_THICKNESS, WALL_HEIGHT, wallLength);
+  const leftWall = new THREE.Mesh(eastWestGeometry, wallMaterial);
+  leftWall.position.set(-wallOffset, WALL_HEIGHT / 2, 0);
+  scene.add(leftWall);
+
+  const rightWall = new THREE.Mesh(eastWestGeometry, wallMaterial);
+  rightWall.position.set(wallOffset, WALL_HEIGHT / 2, 0);
+  scene.add(rightWall);
+}
+createBoundaryWalls();
 
 // ---------- Temporary placeholder motorcycle ----------
 // Built only from simple shapes. This is NOT the final motorcycle model.
@@ -226,6 +279,7 @@ const ACCELERATION = 6;             // how fast speed builds up when W or S is h
 const BRAKING_DECELERATION = 14;    // how fast speed drops when the opposite key is pressed
 const COASTING_DECELERATION = 5;    // how fast the bike slows down when no key is pressed
 const TURN_SPEED = 1.2;             // radians per second
+const WALL_BRAKING = 40;            // how fast the bike loses speed while pressed against a wall
 
 // ---------- Visual lean settings (easy to adjust later) ----------
 const MAX_LEAN_ANGLE = 0.2;         // maximum lean in radians (about 11.5 degrees)
@@ -291,6 +345,21 @@ function updateMotorcycle(delta) {
     motorcycle.position.addScaledVector(moveDirection, currentSpeed * delta);
   }
 
+  // ----- Boundary: keep the bike inside the playable area -----
+  // If the bike went past a limit, put it back on the limit and
+  // quickly (but smoothly) take away its speed.
+  const clampedX = THREE.MathUtils.clamp(motorcycle.position.x, -BIKE_LIMIT, BIKE_LIMIT);
+  const clampedZ = THREE.MathUtils.clamp(motorcycle.position.z, -BIKE_LIMIT, BIKE_LIMIT);
+  const hitBoundary =
+    clampedX !== motorcycle.position.x || clampedZ !== motorcycle.position.z;
+
+  motorcycle.position.x = clampedX;
+  motorcycle.position.z = clampedZ;
+
+  if (hitBoundary) {
+    currentSpeed = moveToward(currentSpeed, 0, WALL_BRAKING * delta);
+  }
+
   // The bike stays on the ground (height is never changed)
   motorcycle.position.y = 0;
 }
@@ -342,6 +411,10 @@ function computeCameraTargets() {
 
   desiredCameraPosition.copy(cameraOffset);
   motorcycle.localToWorld(desiredCameraPosition);
+
+  // Keep the camera inside the walls so it never ends up outside the game area
+  desiredCameraPosition.x = THREE.MathUtils.clamp(desiredCameraPosition.x, -CAMERA_LIMIT, CAMERA_LIMIT);
+  desiredCameraPosition.z = THREE.MathUtils.clamp(desiredCameraPosition.z, -CAMERA_LIMIT, CAMERA_LIMIT);
 
   desiredLookTarget.copy(cameraLookOffset);
   motorcycle.localToWorld(desiredLookTarget);
