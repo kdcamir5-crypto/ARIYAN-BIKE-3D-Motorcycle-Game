@@ -21,6 +21,15 @@
   <!-- The 3D canvas will be placed inside this container by js/main.js -->
   <div id="game-container"></div>
 
+  <!-- Speedometer HUD (updated by js/main.js) -->
+  <div id="speedometer" aria-live="off">
+    <div class="speedometer-label">SPEED</div>
+    <div class="speedometer-reading">
+      <span id="speedometer-value">0</span>
+      <span class="speedometer-unit">km/h</span>
+    </div>
+  </div>
+
   <!-- On-screen touch controls (shown on touch devices / small screens) -->
   <div id="touch-controls">
     <div class="touch-group touch-steer">
