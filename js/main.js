@@ -354,9 +354,10 @@ window.addEventListener('blur', () => {
   keys.backward = false;
   keys.left = false;
   keys.right = false;
+  keys.brake = false;
 });
 
-// ---------- Touch controls (on-screen buttons) ----------
+// ---------- Touch buttons (reverse and brake) ----------
 // The buttons simply set the same "keys" values as the keyboard,
 // so the existing movement system is not changed at all.
 
@@ -375,7 +376,7 @@ function releaseAllTouchButtons() {
 }
 
 touchButtons.forEach((button) => {
-  const control = button.dataset.control; // forward, backward, left or right
+  const control = button.dataset.control; // backward (reverse) or brake
   let activePointerId = null;             // the finger/mouse currently holding this button
 
   function press(event) {
@@ -409,14 +410,15 @@ window.addEventListener('blur', releaseAllTouchButtons);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) releaseAllTouchButtons();
 });
+
 // ---------- Touch drive (finger on the screen) ----------
 // Finger down = bike starts and accelerates.
 // Finger moves right/left = bike turns right/left.
 // Finger up = bike slows down.
-// Only touch/pen is used, so the mouse on desktop does nothing here.
+// Touches that start on a button (brake, reverse, sound) are ignored here.
+// Uses classic touch events, which work on every mobile browser.
 const STEER_DEADZONE = 35;          // pixels the finger must move sideways before the bike turns
 
-const touchSurface = renderer.domElement; // the game screen
 let driveTouchId = null;            // the finger that is driving
 let driveStartX = 0;                // where that finger first touched
 
@@ -427,29 +429,41 @@ function stopDriveTouch() {
   keys.right = false;
 }
 
-touchSurface.addEventListener('pointerdown', (event) => {
-  if (event.pointerType === 'mouse') return;   // desktop mouse is ignored
-  if (driveTouchId !== null) return;           // a finger is already driving
-  event.preventDefault();
-  driveTouchId = event.pointerId;
-  driveStartX = event.clientX;
-  try { touchSurface.setPointerCapture(event.pointerId); } catch (e) { /* ignore */ }
+function findTouch(touchList, id) {
+  for (let i = 0; i < touchList.length; i++) {
+    if (touchList[i].identifier === id) return touchList[i];
+  }
+  return null;
+}
+
+document.addEventListener('touchstart', (event) => {
+  if (driveTouchId !== null) return;                        // a finger is already driving
+  const target = event.target;
+  if (target && target.closest && target.closest('button')) return; // buttons work on their own
+  const touch = event.changedTouches[0];
+  driveTouchId = touch.identifier;
+  driveStartX = touch.clientX;
   keys.forward = true;
   keys.left = false;
   keys.right = false;
-});
+  event.preventDefault();                                   // no scrolling or zooming
+}, { passive: false });
 
-touchSurface.addEventListener('pointermove', (event) => {
-  if (event.pointerId !== driveTouchId) return;
-  const dx = event.clientX - driveStartX;
+document.addEventListener('touchmove', (event) => {
+  if (driveTouchId === null) return;
+  const touch = findTouch(event.changedTouches, driveTouchId);
+  if (!touch) return;
+  const dx = touch.clientX - driveStartX;
   keys.left = dx < -STEER_DEADZONE;
   keys.right = dx > STEER_DEADZONE;
-});
+  event.preventDefault();
+}, { passive: false });
 
-['pointerup', 'pointercancel', 'lostpointercapture'].forEach((eventName) => {
-  touchSurface.addEventListener(eventName, (event) => {
-    if (event.pointerId === driveTouchId) stopDriveTouch();
-  });
+['touchend', 'touchcancel'].forEach((eventName) => {
+  document.addEventListener(eventName, (event) => {
+    if (driveTouchId === null) return;
+    if (findTouch(event.changedTouches, driveTouchId)) stopDriveTouch();
+  }, { passive: true });
 });
 
 // Safety: release the driving finger if the page loses focus
@@ -457,6 +471,25 @@ window.addEventListener('blur', stopDriveTouch);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopDriveTouch();
 });
+
+// ---------- TEMP DEBUG BOX (touch test) ----------
+// Shows touch info on the screen. After the touch controls work,
+// change true to false (or delete this block).
+const SHOW_TOUCH_DEBUG = true;
+
+if (SHOW_TOUCH_DEBUG) {
+  const dbg = document.createElement('div');
+  dbg.style.cssText = 'position:fixed;left:8px;top:96px;z-index:50;background:rgba(0,0,0,.65);color:#0f0;font:12px monospace;padding:4px 8px;pointer-events:none;white-space:pre';
+  document.body.appendChild(dbg);
+  let touchCount = 0;
+  document.addEventListener('touchstart', () => { touchCount++; }, { passive: true });
+  setInterval(() => {
+    dbg.textContent = 'touches: ' + touchCount +
+      '\nF:' + keys.forward + ' L:' + keys.left + ' R:' + keys.right + ' B:' + keys.brake +
+      '\nspeed: ' + currentSpeed.toFixed(1);
+  }, 100);
+}
+
 // ---------- Movement settings (easy to adjust later) ----------
 // All speeds are in "units per second".
 // All accelerations are in "units per second, every second".
@@ -506,7 +539,7 @@ function updateMotorcycle(delta) {
   }
 
   // ----- Speed: acceleration, braking and slowing down -----
-    if (keys.brake) {
+  if (keys.brake) {
     // Brake button: slow down to a stop (never reverses)
     currentSpeed = moveToward(currentSpeed, 0, BRAKING_DECELERATION * delta);
   } else if (keys.forward && !keys.backward) {
@@ -761,17 +794,20 @@ function startEngineSound() {
     });
 }
 
-// Called on the first click / touch / key press (browsers need this before playing sound)
+// Called when the finger is lifted / click / key press.
+// Phones only allow sound after these events (not on finger-down).
 function unlockAudio() {
   if (!audioContext) {
     startEngineSound();
-  } else if (soundEnabled && !document.hidden && audioContext.state === 'suspended') {
-    audioContext.resume();
+  }
+  // If the sound system is paused by the browser, wake it up
+  if (audioContext && soundEnabled && !document.hidden && audioContext.state !== 'running') {
+    audioContext.resume().catch(() => {});
   }
 }
-window.addEventListener('pointerdown', unlockAudio, { passive: true });
-window.addEventListener('touchstart', unlockAudio, { passive: true });
-window.addEventListener('keydown', unlockAudio, { passive: true });
+['pointerup', 'touchend', 'click', 'keydown'].forEach((eventName) => {
+  window.addEventListener(eventName, unlockAudio, { passive: true });
+});
 
 function setSoundEnabled(enabled) {
   soundEnabled = enabled;
