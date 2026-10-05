@@ -1,1 +1,27 @@
+/* Remove default spacing and make the page fill the whole screen */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #87ceeb;
+}
 
+/* Container that holds the 3D canvas */
+#game-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The 3D canvas itself */
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none; /* prevents page scrolling/zooming when touching the game on mobile */
+}
