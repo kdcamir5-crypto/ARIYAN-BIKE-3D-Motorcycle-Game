@@ -350,7 +350,59 @@ window.addEventListener('blur', () => {
   keys.left = false;
   keys.right = false;
 });
+// ---------- Touch controls (on-screen buttons) ----------
+// The buttons simply set the same "keys" values as the keyboard,
+// so the existing movement system is not changed at all.
 
+// Show the buttons on devices that support touch
+if (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) {
+  document.body.classList.add('touch-device');
+}
+
+const touchButtons = document.querySelectorAll('#touch-controls [data-control]');
+
+function releaseAllTouchButtons() {
+  touchButtons.forEach((button) => {
+    keys[button.dataset.control] = false;
+    button.classList.remove('active');
+  });
+}
+
+touchButtons.forEach((button) => {
+  const control = button.dataset.control; // forward, backward, left or right
+  let activePointerId = null;             // the finger/mouse currently holding this button
+
+  function press(event) {
+    event.preventDefault();
+    activePointerId = event.pointerId;
+    keys[control] = true;
+    button.classList.add('active');
+  }
+
+  function release(event) {
+    // Ignore other fingers that are not holding this button
+    if (activePointerId !== null && event.pointerId !== activePointerId) return;
+    activePointerId = null;
+    keys[control] = false;
+    button.classList.remove('active');
+  }
+
+  button.addEventListener('pointerdown', press);
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointercancel', release);
+  button.addEventListener('pointerleave', release);
+  button.addEventListener('lostpointercapture', release);
+
+  // Stop the long-press menu and text selection
+  button.addEventListener('contextmenu', (event) => event.preventDefault());
+  button.addEventListener('selectstart', (event) => event.preventDefault());
+});
+
+// Safety: if the page loses focus, release every touch button
+window.addEventListener('blur', releaseAllTouchButtons);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) releaseAllTouchButtons();
+});
 // ---------- Movement settings (easy to adjust later) ----------
 // All speeds are in "units per second".
 // All accelerations are in "units per second, every second".
