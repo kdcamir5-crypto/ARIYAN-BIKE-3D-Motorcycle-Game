@@ -1,6 +1,7 @@
-// ARIYAN BIKE GAME - Step 6: Large bounded game area
+// ARIYAN BIKE GAME - Step 7: First proper road
 // This file sets up the scene, camera, lights, renderer, a large bounded
-// ground with visible boundary walls, a temporary placeholder motorcycle
+// ground with visible boundary walls, one long straight road with edge lines
+// and a dashed center line, a temporary placeholder motorcycle
 // (made of simple shapes), keyboard controls with smooth acceleration/braking,
 // rotating wheels, a small visual lean when turning, a smooth follow camera
 // and the animation loop.
@@ -51,6 +52,15 @@ const BIKE_LIMIT = GROUND_HALF - BIKE_MARGIN;
 // The camera must stay inside this limit
 const CAMERA_LIMIT = GROUND_HALF - CAMERA_MARGIN;
 
+// ---------- Road settings (easy to adjust later) ----------
+const ROAD_WIDTH = 12;                   // total road width (the bike is only about 0.5 wide)
+const ROAD_LENGTH = GROUND_SIZE;         // runs from one boundary to the other, never beyond it
+const EDGE_LINE_WIDTH = 0.3;             // width of the white line along each road edge
+const EDGE_LINE_INSET = 0.5;             // distance of the edge line from the road's outer edge
+const DASH_WIDTH = 0.3;                  // width of each center dash
+const DASH_LENGTH = 4;                   // length of each center dash
+const DASH_GAP = 6;                      // empty space between center dashes
+
 // ---------- Playable ground ----------
 const groundGeometry = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
 const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x5a7d4f });
@@ -96,6 +106,70 @@ function createBoundaryWalls() {
   scene.add(rightWall);
 }
 createBoundaryWalls();
+
+// ---------- Road ----------
+// One long straight road along the Z direction, through the middle of the ground.
+// Everything is flat plane geometry lying just above the ground.
+// The layers sit at slightly different heights (and use polygonOffset) so
+// they do not flicker against each other.
+function createRoad() {
+  const roadGroup = new THREE.Group();
+
+  // Dark asphalt-like surface
+  const asphaltMaterial = new THREE.MeshStandardMaterial({
+    color: 0x2b2b2e,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1
+  });
+  const roadSurface = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_LENGTH),
+    asphaltMaterial
+  );
+  roadSurface.rotation.x = -Math.PI / 2;
+  roadSurface.position.set(0, 0.03, 0);
+  roadGroup.add(roadSurface);
+
+  // White lines (used for both the road edges and the center dashes)
+  const lineMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2
+  });
+
+  // Edge lines: one along each side of the road
+  const edgeLineGeometry = new THREE.PlaneGeometry(EDGE_LINE_WIDTH, ROAD_LENGTH);
+  const edgeX = ROAD_WIDTH / 2 - EDGE_LINE_INSET;
+
+  const leftEdgeLine = new THREE.Mesh(edgeLineGeometry, lineMaterial);
+  leftEdgeLine.rotation.x = -Math.PI / 2;
+  leftEdgeLine.position.set(-edgeX, 0.06, 0);
+  roadGroup.add(leftEdgeLine);
+
+  const rightEdgeLine = new THREE.Mesh(edgeLineGeometry, lineMaterial);
+  rightEdgeLine.rotation.x = -Math.PI / 2;
+  rightEdgeLine.position.set(edgeX, 0.06, 0);
+  roadGroup.add(rightEdgeLine);
+
+  // Center lane marking: repeated white rectangles (all share one geometry)
+  const dashGeometry = new THREE.PlaneGeometry(DASH_WIDTH, DASH_LENGTH);
+  const dashPeriod = DASH_LENGTH + DASH_GAP;
+  const dashCount = Math.floor((ROAD_LENGTH + DASH_GAP) / dashPeriod);
+  // Total length used by all dashes, so we can center the pattern on the road
+  const patternLength = dashCount * dashPeriod - DASH_GAP;
+  const firstDashZ = -patternLength / 2 + DASH_LENGTH / 2;
+
+  for (let i = 0; i < dashCount; i++) {
+    const dash = new THREE.Mesh(dashGeometry, lineMaterial);
+    dash.rotation.x = -Math.PI / 2;
+    dash.position.set(0, 0.06, firstDashZ + i * dashPeriod);
+    roadGroup.add(dash);
+  }
+
+  scene.add(roadGroup);
+}
+createRoad();
 
 // ---------- Temporary placeholder motorcycle ----------
 // Built only from simple shapes. This is NOT the final motorcycle model.
@@ -214,6 +288,7 @@ const bikeVisual = bikeParts.visual;
 const frontWheelPivot = bikeParts.frontWheelPivot;
 const rearWheelPivot = bikeParts.rearWheelPivot;
 
+// The bike starts at the center of the road, facing along it (-Z direction)
 motorcycle.position.set(0, 0, 0);
 scene.add(motorcycle);
 
