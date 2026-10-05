@@ -10,7 +10,6 @@ import * as THREE from 'three';
 import {
     initAudio,
     startEngineSound,
-    updateEngineSound
 } from './audio.js';
 
 // ---------- Renderer (WebGL) ----------
