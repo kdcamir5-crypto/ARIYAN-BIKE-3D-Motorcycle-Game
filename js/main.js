@@ -1,7 +1,7 @@
-// ARIYAN BIKE GAME - Step 3: Basic keyboard control
+// ARIYAN BIKE GAME - Step 4: Acceleration and braking
 // This file sets up the scene, camera, lights, renderer, a temporary
-// placeholder motorcycle (made of simple shapes), keyboard controls,
-// a smooth follow camera and the animation loop.
+// placeholder motorcycle (made of simple shapes), keyboard controls with
+// smooth acceleration/braking, a smooth follow camera and the animation loop.
 
 import * as THREE from 'three';
 
@@ -183,16 +183,33 @@ window.addEventListener('blur', () => {
   keys.right = false;
 });
 
-// ---------- Basic movement settings (simple, no physics) ----------
-const FORWARD_SPEED = 8;    // units per second
-const BACKWARD_SPEED = 4;   // units per second (slower when reversing)
-const TURN_SPEED = 1.8;     // radians per second
+// ---------- Movement settings (easy to adjust later) ----------
+// All speeds are in "units per second".
+// All accelerations are in "units per second, every second".
+const MAX_FORWARD_SPEED = 18;       // top speed going forward
+const MAX_REVERSE_SPEED = 5;        // top speed going backward (much slower)
+const ACCELERATION = 6;             // how fast speed builds up when W or S is held
+const BRAKING_DECELERATION = 14;    // how fast speed drops when the opposite key is pressed
+const COASTING_DECELERATION = 5;    // how fast the bike slows down when no key is pressed
+const TURN_SPEED = 1.2;             // radians per second
+
+// The bike's current speed.
+// Positive = moving forward, negative = moving backward, 0 = stopped.
+let currentSpeed = 0;
 
 // Reused each frame so we don't create new objects constantly
 const moveDirection = new THREE.Vector3();
 
+// Moves a number toward a target value by at most "amount" (never overshoots)
+function moveToward(value, target, amount) {
+  if (value < target) return Math.min(value + amount, target);
+  if (value > target) return Math.max(value - amount, target);
+  return target;
+}
+
 function updateMotorcycle(delta) {
-  // Turning: rotate around the vertical (Y) axis
+  // ----- Turning: rotate around the vertical (Y) axis -----
+  // Allowed while stopped and while moving.
   if (keys.left) {
     motorcycle.rotation.y += TURN_SPEED * delta;
   }
@@ -200,15 +217,36 @@ function updateMotorcycle(delta) {
     motorcycle.rotation.y -= TURN_SPEED * delta;
   }
 
-  // Moving: go along the direction the bike is currently facing.
-  // The bike's front points to -Z in its own space.
-  let speed = 0;
-  if (keys.forward) speed += FORWARD_SPEED;
-  if (keys.backward) speed -= BACKWARD_SPEED;
+  // ----- Speed: acceleration, braking and slowing down -----
+  if (keys.forward && !keys.backward) {
+    if (currentSpeed < 0) {
+      // Moving backward but W is pressed: brake first
+      currentSpeed += BRAKING_DECELERATION * delta;
+    } else {
+      // Normal forward acceleration
+      currentSpeed += ACCELERATION * delta;
+    }
+  } else if (keys.backward && !keys.forward) {
+    if (currentSpeed > 0) {
+      // Moving forward but S is pressed: brake first
+      currentSpeed -= BRAKING_DECELERATION * delta;
+    } else {
+      // Normal reverse acceleration
+      currentSpeed -= ACCELERATION * delta;
+    }
+  } else {
+    // No key (or both keys): slowly roll to a stop
+    currentSpeed = moveToward(currentSpeed, 0, COASTING_DECELERATION * delta);
+  }
 
-  if (speed !== 0) {
+  // Never go faster than the allowed top speeds
+  currentSpeed = Math.max(-MAX_REVERSE_SPEED, Math.min(MAX_FORWARD_SPEED, currentSpeed));
+
+  // ----- Moving: go along the direction the bike is currently facing -----
+  // The bike's front points to -Z in its own space.
+  if (currentSpeed !== 0) {
     moveDirection.set(0, 0, -1).applyQuaternion(motorcycle.quaternion);
-    motorcycle.position.addScaledVector(moveDirection, speed * delta);
+    motorcycle.position.addScaledVector(moveDirection, currentSpeed * delta);
   }
 
   // The bike stays on the ground (height is never changed)
