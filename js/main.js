@@ -1,6 +1,7 @@
-// ARIYAN BIKE GAME - Step 2: Placeholder motorcycle + follow camera
+// ARIYAN BIKE GAME - Step 3: Basic keyboard control
 // This file sets up the scene, camera, lights, renderer, a temporary
-// placeholder motorcycle (made of simple shapes) and the animation loop.
+// placeholder motorcycle (made of simple shapes), keyboard controls,
+// a smooth follow camera and the animation loop.
 
 import * as THREE from 'three';
 
@@ -129,25 +130,129 @@ const motorcycle = createPlaceholderMotorcycle();
 motorcycle.position.set(0, 0, 0);
 scene.add(motorcycle);
 
+// ---------- Keyboard input ----------
+// Remembers which control keys are being held down right now.
+const keys = {
+  forward: false,
+  backward: false,
+  left: false,
+  right: false
+};
+
+// Connects keyboard keys to the controls above
+function getControlFromKey(code) {
+  switch (code) {
+    case 'KeyW':
+    case 'ArrowUp':
+      return 'forward';
+    case 'KeyS':
+    case 'ArrowDown':
+      return 'backward';
+    case 'KeyA':
+    case 'ArrowLeft':
+      return 'left';
+    case 'KeyD':
+    case 'ArrowRight':
+      return 'right';
+    default:
+      return null;
+  }
+}
+
+window.addEventListener('keydown', (event) => {
+  const control = getControlFromKey(event.code);
+  if (control) {
+    keys[control] = true;
+    event.preventDefault(); // stop arrow keys from scrolling the page
+  }
+});
+
+window.addEventListener('keyup', (event) => {
+  const control = getControlFromKey(event.code);
+  if (control) {
+    keys[control] = false;
+    event.preventDefault();
+  }
+});
+
+// If the browser tab loses focus, release all keys so the bike doesn't keep moving
+window.addEventListener('blur', () => {
+  keys.forward = false;
+  keys.backward = false;
+  keys.left = false;
+  keys.right = false;
+});
+
+// ---------- Basic movement settings (simple, no physics) ----------
+const FORWARD_SPEED = 8;    // units per second
+const BACKWARD_SPEED = 4;   // units per second (slower when reversing)
+const TURN_SPEED = 1.8;     // radians per second
+
+// Reused each frame so we don't create new objects constantly
+const moveDirection = new THREE.Vector3();
+
+function updateMotorcycle(delta) {
+  // Turning: rotate around the vertical (Y) axis
+  if (keys.left) {
+    motorcycle.rotation.y += TURN_SPEED * delta;
+  }
+  if (keys.right) {
+    motorcycle.rotation.y -= TURN_SPEED * delta;
+  }
+
+  // Moving: go along the direction the bike is currently facing.
+  // The bike's front points to -Z in its own space.
+  let speed = 0;
+  if (keys.forward) speed += FORWARD_SPEED;
+  if (keys.backward) speed -= BACKWARD_SPEED;
+
+  if (speed !== 0) {
+    moveDirection.set(0, 0, -1).applyQuaternion(motorcycle.quaternion);
+    motorcycle.position.addScaledVector(moveDirection, speed * delta);
+  }
+
+  // The bike stays on the ground (height is never changed)
+  motorcycle.position.y = 0;
+}
+
 // ---------- Follow camera ----------
 // The camera sits behind and slightly above the motorcycle.
 // Offset is measured from the motorcycle: (x = side, y = up, z = behind)
 const cameraOffset = new THREE.Vector3(0, 2.2, 5);
 const cameraLookOffset = new THREE.Vector3(0, 0.9, 0); // point on the bike to look at
 
-function updateFollowCamera() {
-  // Turn the offset into a real world position using the bike's position and direction
-  const cameraPosition = cameraOffset.clone();
-  motorcycle.localToWorld(cameraPosition);
-  camera.position.copy(cameraPosition);
+const desiredCameraPosition = new THREE.Vector3();
+const desiredLookTarget = new THREE.Vector3();
+const currentLookTarget = new THREE.Vector3();
 
-  const lookTarget = cameraLookOffset.clone();
-  motorcycle.localToWorld(lookTarget);
-  camera.lookAt(lookTarget);
+const CAMERA_FOLLOW_SPEED = 5; // higher = camera follows more tightly
+
+function computeCameraTargets() {
+  // Make sure the bike's world position/rotation is up to date
+  motorcycle.updateMatrixWorld(true);
+
+  desiredCameraPosition.copy(cameraOffset);
+  motorcycle.localToWorld(desiredCameraPosition);
+
+  desiredLookTarget.copy(cameraLookOffset);
+  motorcycle.localToWorld(desiredLookTarget);
 }
 
-// Place the camera once at the start
-updateFollowCamera();
+// Place the camera instantly at the start (no sliding)
+computeCameraTargets();
+camera.position.copy(desiredCameraPosition);
+currentLookTarget.copy(desiredLookTarget);
+camera.lookAt(currentLookTarget);
+
+function updateFollowCamera(delta) {
+  computeCameraTargets();
+
+  // Move smoothly toward the wanted position
+  const smoothing = 1 - Math.exp(-CAMERA_FOLLOW_SPEED * delta);
+  camera.position.lerp(desiredCameraPosition, smoothing);
+  currentLookTarget.lerp(desiredLookTarget, smoothing);
+  camera.lookAt(currentLookTarget);
+}
 
 // ---------- Resize handling (desktop + mobile) ----------
 function onWindowResize() {
@@ -160,12 +265,16 @@ window.addEventListener('resize', onWindowResize);
 window.addEventListener('orientationchange', onWindowResize);
 
 // ---------- Animation / render loop ----------
+const clock = new THREE.Clock();
+
 function animate() {
   requestAnimationFrame(animate);
 
-  // Keep the camera attached behind the motorcycle
-  // (the motorcycle is stationary for now, so the view will not change)
-  updateFollowCamera();
+  // Time since the last frame (limited so the bike never jumps after a pause)
+  const delta = Math.min(clock.getDelta(), 0.1);
+
+  updateMotorcycle(delta);
+  updateFollowCamera(delta);
 
   renderer.render(scene, camera);
 }
