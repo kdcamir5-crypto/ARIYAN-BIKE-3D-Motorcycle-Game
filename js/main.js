@@ -656,7 +656,6 @@ function animate() {
   updateMotorcycle(delta);
   updateMotorcycleVisuals(delta);
   updateFollowCamera(delta);
-  updateFollowCamera(delta);
   updateSpeedometer();
   renderer.render(scene, camera);
 }
