@@ -114,11 +114,6 @@ createBoundaryWalls();
 // they do not flicker against each other.
 function createRoad() {
   const roadGroup = new THREE.Group();
-// ---------- Roadside environment (Step 8) ----------
-// Loaded from a separate file. If it fails, the rest of the game still works.
-import('./environment.js')
-  .then((module) => module.createRoadsideEnvironment(scene, ROAD_WIDTH))
-  .catch((error) => console.error('Roadside environment failed:', error));
   // Dark asphalt-like surface
   const asphaltMaterial = new THREE.MeshStandardMaterial({
     color: 0x2b2b2e,
@@ -174,7 +169,14 @@ import('./environment.js')
   scene.add(roadGroup);
 }
 createRoad();
+// List of collision circles (trees, rocks, lamp posts). Filled when environment.js loads.
+let obstacles = [];
 
+import('./environment.js')
+  .then((module) => {
+    obstacles = module.createRoadsideEnvironment(scene, ROAD_WIDTH);
+  })
+  .catch((error) => console.error('Roadside environment failed:', error));
 // ---------- Temporary placeholder motorcycle ----------
 // Built only from simple shapes. This is NOT the final motorcycle model.
 // The bike faces the -Z direction (its front points away from the camera).
@@ -360,6 +362,10 @@ const COASTING_DECELERATION = 5;    // how fast the bike slows down when no key 
 const TURN_SPEED = 1.2;             // radians per second
 const WALL_BRAKING = 40;            // how fast the bike loses speed while pressed against a wall
 
+// ---------- Obstacle collision settings (easy to adjust later) ----------
+const BIKE_COLLISION_RADIUS = 0.4;  // size of each collision circle on the bike
+const BIKE_COLLISION_OFFSET = 0.8;  // front and rear circles are this far from the bike center
+const OBSTACLE_BRAKING = 40;        // how fast the bike loses speed while pressed against an obstacle
 // ---------- Visual lean settings (easy to adjust later) ----------
 const MAX_LEAN_ANGLE = 0.2;         // maximum lean in radians (about 11.5 degrees)
 const LEAN_SMOOTHING = 8;           // higher = leans and returns upright faster
@@ -423,7 +429,50 @@ function updateMotorcycle(delta) {
     moveDirection.set(0, 0, -1).applyQuaternion(motorcycle.quaternion);
     motorcycle.position.addScaledVector(moveDirection, currentSpeed * delta);
   }
+  // ----- Obstacle collision: trees, rocks and lamp posts -----
+  // The bike is covered by 3 small circles (front, center, rear).
+  // If a circle enters an obstacle circle, the bike is pushed back out.
+  // This gives a simple stop-and-slide, with no bouncing.
+  if (obstacles.length > 0) {
+    let hitObstacle = false;
+    const forwardX = -Math.sin(motorcycle.rotation.y);
+    const forwardZ = -Math.cos(motorcycle.rotation.y);
 
+    // Two passes so pushing away from one object cannot push into the next
+    for (let pass = 0; pass < 2; pass++) {
+      for (let p = -1; p <= 1; p++) {
+        const pointX = motorcycle.position.x + forwardX * p * BIKE_COLLISION_OFFSET;
+        const pointZ = motorcycle.position.z + forwardZ * p * BIKE_COLLISION_OFFSET;
+
+        for (let i = 0; i < obstacles.length; i++) {
+          const obstacle = obstacles[i];
+          const minDistance = obstacle.r + BIKE_COLLISION_RADIUS;
+          const dx = pointX - obstacle.x;
+          const dz = pointZ - obstacle.z;
+
+          // Quick rejection: skip objects that are clearly far away
+          if (Math.abs(dx) > minDistance || Math.abs(dz) > minDistance) continue;
+
+          const distSq = dx * dx + dz * dz;
+          if (distSq < minDistance * minDistance) {
+            const dist = Math.sqrt(distSq);
+            // Push the bike straight out of the obstacle
+            const pushX = dist > 0.0001 ? dx / dist : forwardX;
+            const pushZ = dist > 0.0001 ? dz / dist : forwardZ;
+            const overlap = minDistance - dist;
+            motorcycle.position.x += pushX * overlap;
+            motorcycle.position.z += pushZ * overlap;
+            hitObstacle = true;
+          }
+        }
+      }
+    }
+
+    // Quickly (but smoothly) take away speed while touching an obstacle
+    if (hitObstacle) {
+      currentSpeed = moveToward(currentSpeed, 0, OBSTACLE_BRAKING * delta);
+    }
+  }
   // ----- Boundary: keep the bike inside the playable area -----
   // If the bike went past a limit, put it back on the limit and
   // quickly (but smoothly) take away its speed.
