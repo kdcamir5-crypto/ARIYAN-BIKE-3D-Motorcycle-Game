@@ -418,7 +418,9 @@ document.addEventListener('visibilitychange', () => {
 // Touches that start on a button (brake, reverse, sound) are ignored here.
 // Uses classic touch events, which work on every mobile browser.
 const STEER_DEADZONE = 35;          // pixels the finger must move sideways before the bike turns
-
+const STEER_FULL_RANGE = 130;       // extra pixels of finger movement to reach the strongest turn
+const TOUCH_MAX_TURN = 0.6;         // strongest touch turn = 60% of TURN_SPEED (lower = gentler)
+let steerStrength = 1;              // 1 = keyboard (full speed), touch changes this while steering
 let driveTouchId = null;            // the finger that is driving
 let driveStartX = 0;                // where that finger first touched
 
@@ -427,6 +429,7 @@ function stopDriveTouch() {
   keys.forward = false;
   keys.left = false;
   keys.right = false;
+  steerStrength = 1;
 }
 
 function findTouch(touchList, id) {
@@ -456,9 +459,11 @@ document.addEventListener('touchmove', (event) => {
   const dx = touch.clientX - driveStartX;
   keys.left = dx < -STEER_DEADZONE;
   keys.right = dx > STEER_DEADZONE;
+  // The further the finger moves, the stronger (but still gentle) the turn
+  const t = THREE.MathUtils.clamp((Math.abs(dx) - STEER_DEADZONE) / STEER_FULL_RANGE, 0, 1);
+  steerStrength = TOUCH_MAX_TURN * t;
   event.preventDefault();
 }, { passive: false });
-
 ['touchend', 'touchcancel'].forEach((eventName) => {
   document.addEventListener(eventName, (event) => {
     if (driveTouchId === null) return;
