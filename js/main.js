@@ -794,7 +794,6 @@ function animate() {
   updateFollowCamera(delta);
   updateSpeedometer();
   updateEngineSound();
-  updateEngineSound(currentSpeed);
   renderer.render(scene, camera);
 }
 animate();
