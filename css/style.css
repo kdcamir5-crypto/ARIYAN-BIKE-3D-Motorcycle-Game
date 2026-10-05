@@ -30,6 +30,87 @@ canvas {
   touch-action: none; /* prevents page scrolling/zooming when touching the game on mobile */
 }
 
+/* ---------- Speedometer HUD ---------- */
+
+#speedometer {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  left: calc(14px + env(safe-area-inset-left, 0px));
+  min-width: 118px;
+  padding: 8px 16px 10px;
+  border-radius: 16px;
+  background: rgba(15, 15, 25, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  text-align: center;
+  pointer-events: none; /* the HUD never blocks touches or clicks */
+  z-index: 9;
+}
+
+.speedometer-label {
+  font-size: 11px;
+  letter-spacing: 3px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.speedometer-reading {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1.1;
+}
+
+#speedometer-value {
+  font-size: 40px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums; /* digits keep the same width, so the number does not wiggle */
+  min-width: 3ch;
+  text-align: right;
+}
+
+.speedometer-unit {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* Small screens: smaller speedometer */
+@media (max-width: 768px) {
+  #speedometer {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    min-width: 96px;
+    padding: 6px 12px 8px;
+    border-radius: 14px;
+  }
+  .speedometer-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+  }
+  #speedometer-value {
+    font-size: 30px;
+  }
+  .speedometer-unit {
+    font-size: 12px;
+  }
+}
+
+/* Short screens (phones in landscape): even more compact */
+@media (max-height: 480px) {
+  #speedometer {
+    top: calc(6px + env(safe-area-inset-top, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    min-width: 84px;
+    padding: 4px 10px 6px;
+  }
+  #speedometer-value {
+    font-size: 24px;
+  }
+}
+
 /* ---------- Touch controls ---------- */
 
 /* Hidden by default (desktop). Shown on touch devices and small screens. */
