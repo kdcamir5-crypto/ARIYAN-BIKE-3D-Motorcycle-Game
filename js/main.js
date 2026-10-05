@@ -114,7 +114,11 @@ createBoundaryWalls();
 // they do not flicker against each other.
 function createRoad() {
   const roadGroup = new THREE.Group();
-
+// ---------- Roadside environment (Step 8) ----------
+// Loaded from a separate file. If it fails, the rest of the game still works.
+import('./environment.js')
+  .then((module) => module.createRoadsideEnvironment(scene, ROAD_WIDTH))
+  .catch((error) => console.error('Roadside environment failed:', error));
   // Dark asphalt-like surface
   const asphaltMaterial = new THREE.MeshStandardMaterial({
     color: 0x2b2b2e,
