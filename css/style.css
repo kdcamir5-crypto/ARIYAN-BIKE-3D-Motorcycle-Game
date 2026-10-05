@@ -7,6 +7,10 @@ body {
   height: 100%;
   overflow: hidden;
   background-color: #87ceeb;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Container that holds the 3D canvas */
@@ -24,4 +28,95 @@ canvas {
   width: 100%;
   height: 100%;
   touch-action: none; /* prevents page scrolling/zooming when touching the game on mobile */
+}
+
+/* ---------- Touch controls ---------- */
+
+/* Hidden by default (desktop). Shown on touch devices and small screens. */
+#touch-controls {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  pointer-events: none; /* only the buttons themselves react to touch */
+  z-index: 10;
+  touch-action: none;
+}
+
+body.touch-device #touch-controls {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  #touch-controls {
+    display: block;
+  }
+}
+
+.touch-group {
+  position: fixed;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  gap: 14px;
+  pointer-events: none;
+}
+
+/* Left and right buttons: bottom-left corner */
+.touch-steer {
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  flex-direction: row;
+}
+
+/* Forward and reverse buttons: bottom-right corner (forward on top) */
+.touch-drive {
+  right: calc(18px + env(safe-area-inset-right, 0px));
+  flex-direction: column-reverse;
+}
+
+.touch-btn {
+  pointer-events: auto;
+  width: 78px;
+  height: 78px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 22px;
+  background: rgba(20, 20, 30, 0.38);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 30px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: none; /* no scrolling or zooming while pressing */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Pressed look */
+.touch-btn.active {
+  background: rgba(255, 255, 255, 0.5);
+  color: #111;
+  transform: scale(0.94);
+}
+
+/* Short screens (phones in landscape): slightly smaller buttons */
+@media (max-height: 480px) {
+  .touch-btn {
+    width: 64px;
+    height: 64px;
+    font-size: 26px;
+    border-radius: 18px;
+  }
+  .touch-group {
+    gap: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
 }
