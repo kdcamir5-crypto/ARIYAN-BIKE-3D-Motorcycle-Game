@@ -536,11 +536,11 @@ function moveToward(value, target, amount) {
 function updateMotorcycle(delta) {
   // ----- Turning: rotate around the vertical (Y) axis -----
   // Allowed while stopped and while moving.
-  if (keys.left) {
-    motorcycle.rotation.y += TURN_SPEED * delta;
+   if (keys.left) {
+    motorcycle.rotation.y += TURN_SPEED * steerStrength * delta;
   }
   if (keys.right) {
-    motorcycle.rotation.y -= TURN_SPEED * delta;
+    motorcycle.rotation.y -= TURN_SPEED * steerStrength * delta;
   }
 
   // ----- Speed: acceleration, braking and slowing down -----
