@@ -308,7 +308,8 @@ const keys = {
   forward: false,
   backward: false,
   left: false,
-  right: false
+  right: false,
+  brake: false
 };
 
 // Connects keyboard keys to the controls above
@@ -408,7 +409,54 @@ window.addEventListener('blur', releaseAllTouchButtons);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) releaseAllTouchButtons();
 });
+// ---------- Touch drive (finger on the screen) ----------
+// Finger down = bike starts and accelerates.
+// Finger moves right/left = bike turns right/left.
+// Finger up = bike slows down.
+// Only touch/pen is used, so the mouse on desktop does nothing here.
+const STEER_DEADZONE = 35;          // pixels the finger must move sideways before the bike turns
 
+const touchSurface = renderer.domElement; // the game screen
+let driveTouchId = null;            // the finger that is driving
+let driveStartX = 0;                // where that finger first touched
+
+function stopDriveTouch() {
+  driveTouchId = null;
+  keys.forward = false;
+  keys.left = false;
+  keys.right = false;
+}
+
+touchSurface.addEventListener('pointerdown', (event) => {
+  if (event.pointerType === 'mouse') return;   // desktop mouse is ignored
+  if (driveTouchId !== null) return;           // a finger is already driving
+  event.preventDefault();
+  driveTouchId = event.pointerId;
+  driveStartX = event.clientX;
+  try { touchSurface.setPointerCapture(event.pointerId); } catch (e) { /* ignore */ }
+  keys.forward = true;
+  keys.left = false;
+  keys.right = false;
+});
+
+touchSurface.addEventListener('pointermove', (event) => {
+  if (event.pointerId !== driveTouchId) return;
+  const dx = event.clientX - driveStartX;
+  keys.left = dx < -STEER_DEADZONE;
+  keys.right = dx > STEER_DEADZONE;
+});
+
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach((eventName) => {
+  touchSurface.addEventListener(eventName, (event) => {
+    if (event.pointerId === driveTouchId) stopDriveTouch();
+  });
+});
+
+// Safety: release the driving finger if the page loses focus
+window.addEventListener('blur', stopDriveTouch);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopDriveTouch();
+});
 // ---------- Movement settings (easy to adjust later) ----------
 // All speeds are in "units per second".
 // All accelerations are in "units per second, every second".
@@ -458,7 +506,10 @@ function updateMotorcycle(delta) {
   }
 
   // ----- Speed: acceleration, braking and slowing down -----
-  if (keys.forward && !keys.backward) {
+    if (keys.brake) {
+    // Brake button: slow down to a stop (never reverses)
+    currentSpeed = moveToward(currentSpeed, 0, BRAKING_DECELERATION * delta);
+  } else if (keys.forward && !keys.backward) {
     if (currentSpeed < 0) {
       // Moving backward but W is pressed: brake first
       currentSpeed += BRAKING_DECELERATION * delta;
