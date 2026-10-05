@@ -31,6 +31,11 @@
   </div>
   <!-- Engine sound on/off button -->
   <button type="button" id="sound-toggle" aria-label="Turn engine sound on or off" aria-pressed="true">&#128266; ON</button>
+    <!-- Invisible throttle zone for phones: touch and hold to accelerate -->
+  <div id="throttle-zone"></div>
+
+  <!-- Message shown if motion (tilt) permission is not given -->
+  <div id="tilt-message" hidden>Tilt control চালু করতে motion permission দিন</div>
   <!-- On-screen touch controls (shown on touch devices / small screens) -->
    <div id="touch-controls">
     <div class="touch-group touch-steer">
@@ -40,6 +45,6 @@
   </div>
 
   <!-- Main game script -->
- <script type="module" src="./js/main.js?v=2"></script>
+ <script type="module" src="./js/main.js?v=3"></script>
 </body>
 </html>
