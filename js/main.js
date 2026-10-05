@@ -1,7 +1,8 @@
 // ARIYAN BIKE GAME - main game file
 // Includes: scene, camera, lights, renderer, large bounded ground with walls,
 // one long road, roadside environment (loaded from environment.js) with
-// collision, a temporary placeholder motorcycle, keyboard + touch controls,
+// collision, a temporary placeholder motorcycle, keyboard controls,
+// mobile controls (touch throttle + tilt steering, loaded from mobile-controls.js),
 // acceleration/braking, rotating wheels, visual lean, follow camera,
 // speedometer and engine sound.
 
@@ -411,100 +412,34 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) releaseAllTouchButtons();
 });
 
-// ---------- Touch drive (finger on the screen) ----------
-// Finger down = bike starts and accelerates.
-// Finger moves right/left = bike turns right/left.
-// Finger up = bike slows down.
-// Touches that start on a button (brake, reverse, sound) are ignored here.
-// Uses classic touch events, which work on every mobile browser.
-const STEER_DEADZONE = 35;          // pixels the finger must move sideways before the bike turns
-const STEER_FULL_RANGE = 130;       // extra pixels of finger movement to reach the strongest turn
-const TOUCH_MAX_TURN = 0.6;         // strongest touch turn = 60% of TURN_SPEED (lower = gentler)
-let steerStrength = 1;              // 1 = keyboard (full speed), touch changes this while steering
-let driveTouchId = null;            // the finger that is driving
-let driveStartX = 0;                // where that finger first touched
+// ---------- Mobile controls (touch throttle + phone tilt steering) ----------
+// Loaded from js/mobile-controls.js. If it fails, keyboard and buttons still work.
+// "mobile" has: throttle (finger down), started (finger was touched once),
+// steering (-1 to 1, positive = left) and update(delta).
+let mobile = null;
 
-function stopDriveTouch() {
-  driveTouchId = null;
-  keys.forward = false;
-  keys.left = false;
-  keys.right = false;
-  steerStrength = 1;
-}
-
-function findTouch(touchList, id) {
-  for (let i = 0; i < touchList.length; i++) {
-    if (touchList[i].identifier === id) return touchList[i];
-  }
-  return null;
-}
-
-document.addEventListener('touchstart', (event) => {
-  if (driveTouchId !== null) return;                        // a finger is already driving
-  const target = event.target;
-  if (target && target.closest && target.closest('button')) return; // buttons work on their own
-  const touch = event.changedTouches[0];
-  driveTouchId = touch.identifier;
-  driveStartX = touch.clientX;
-  keys.forward = true;
-  keys.left = false;
-  keys.right = false;
-  event.preventDefault();                                   // no scrolling or zooming
-}, { passive: false });
-
-document.addEventListener('touchmove', (event) => {
-  if (driveTouchId === null) return;
-  const touch = findTouch(event.changedTouches, driveTouchId);
-  if (!touch) return;
-  const dx = touch.clientX - driveStartX;
-  keys.left = dx < -STEER_DEADZONE;
-  keys.right = dx > STEER_DEADZONE;
-  // The further the finger moves, the stronger (but still gentle) the turn
-  const t = THREE.MathUtils.clamp((Math.abs(dx) - STEER_DEADZONE) / STEER_FULL_RANGE, 0, 1);
-  steerStrength = TOUCH_MAX_TURN * t;
-  event.preventDefault();
-}, { passive: false });
-['touchend', 'touchcancel'].forEach((eventName) => {
-  document.addEventListener(eventName, (event) => {
-    if (driveTouchId === null) return;
-    if (findTouch(event.changedTouches, driveTouchId)) stopDriveTouch();
-  }, { passive: true });
-});
-
-// Safety: release the driving finger if the page loses focus
-window.addEventListener('blur', stopDriveTouch);
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) stopDriveTouch();
-});
-
-// ---------- TEMP DEBUG BOX (touch test) ----------
-// Shows touch info on the screen. After the touch controls work,
-// change true to false (or delete this block).
-const SHOW_TOUCH_DEBUG = true;
-
-if (SHOW_TOUCH_DEBUG) {
-  const dbg = document.createElement('div');
-  dbg.style.cssText = 'position:fixed;left:8px;top:96px;z-index:50;background:rgba(0,0,0,.65);color:#0f0;font:12px monospace;padding:4px 8px;pointer-events:none;white-space:pre';
-  document.body.appendChild(dbg);
-  let touchCount = 0;
-  document.addEventListener('touchstart', () => { touchCount++; }, { passive: true });
-  setInterval(() => {
-    dbg.textContent = 'touches: ' + touchCount +
-      '\nF:' + keys.forward + ' L:' + keys.left + ' R:' + keys.right + ' B:' + keys.brake +
-      '\nspeed: ' + currentSpeed.toFixed(1);
-  }, 100);
-}
+import('./mobile-controls.js?v=1')
+  .then((module) => {
+    mobile = module.initMobileControls();
+  })
+  .catch((error) => console.error('Mobile controls failed:', error));
 
 // ---------- Movement settings (easy to adjust later) ----------
 // All speeds are in "units per second".
 // All accelerations are in "units per second, every second".
-const MAX_FORWARD_SPEED = 18;       // top speed going forward
+const MAX_FORWARD_SPEED = 18;       // top speed going forward (this is the MAX_SPEED)
 const MAX_REVERSE_SPEED = 5;        // top speed going backward (much slower)
 const ACCELERATION = 6;             // how fast speed builds up when W or S is held
 const BRAKING_DECELERATION = 14;    // how fast speed drops when the opposite key is pressed
 const COASTING_DECELERATION = 5;    // how fast the bike slows down when no key is pressed
 const TURN_SPEED = 1.2;             // radians per second
 const WALL_BRAKING = 40;            // how fast the bike loses speed while pressed against a wall
+
+// ---------- Mobile movement settings (easy to adjust later) ----------
+const TOUCH_ACCELERATION = 4;       // how fast speed builds up while the finger is down
+const MIN_SPEED = 4;                // rolling speed after the finger is lifted (never slower, until you brake)
+const TOUCH_DECELERATION = 2.5;     // how gently the bike slows down after the finger is lifted
+const TILT_MAX_TURN_RATE = 1.1;     // strongest turn from phone tilt (radians per second)
 
 // ---------- Obstacle collision settings (easy to adjust later) ----------
 const BIKE_COLLISION_RADIUS = 0.4;  // size of each collision circle on the bike
@@ -534,19 +469,45 @@ function moveToward(value, target, amount) {
 }
 
 function updateMotorcycle(delta) {
+  // ----- Mobile controls state -----
+  // Reverse or brake ends the "rolling" state, so the bike really stops.
+  // A new touch on the screen starts it again.
+  if (mobile) {
+    mobile.update(delta); // smooths the phone tilt steering
+    if (keys.brake || keys.backward) mobile.started = false;
+  }
+  const touchHeld = mobile !== null && mobile.throttle && !keys.brake && !keys.backward;
+  const touchRolling = mobile !== null && mobile.started && !keys.brake && !keys.backward;
+
   // ----- Turning: rotate around the vertical (Y) axis -----
   // Allowed while stopped and while moving.
-   if (keys.left) {
-    motorcycle.rotation.y += TURN_SPEED * steerStrength * delta;
+  if (keys.left) {
+    motorcycle.rotation.y += TURN_SPEED * delta;
   }
   if (keys.right) {
-    motorcycle.rotation.y -= TURN_SPEED * steerStrength * delta;
+    motorcycle.rotation.y -= TURN_SPEED * delta;
+  }
+
+  // Phone tilt steering: positive = left, negative = right, bigger tilt = stronger turn
+  if (mobile && mobile.steering !== 0) {
+    motorcycle.rotation.y += TILT_MAX_TURN_RATE * mobile.steering * delta;
   }
 
   // ----- Speed: acceleration, braking and slowing down -----
   if (keys.brake) {
     // Brake button: slow down to a stop (never reverses)
     currentSpeed = moveToward(currentSpeed, 0, BRAKING_DECELERATION * delta);
+  } else if (touchHeld) {
+    // Finger on the screen: smooth acceleration up to the top speed
+    if (currentSpeed < 0) {
+      currentSpeed += BRAKING_DECELERATION * delta;
+    } else {
+      currentSpeed += TOUCH_ACCELERATION * delta;
+    }
+  } else if (touchRolling) {
+    // Finger lifted: slow down gently, but keep rolling at MIN_SPEED
+    const rate = currentSpeed > MIN_SPEED ? TOUCH_DECELERATION : TOUCH_ACCELERATION;
+    currentSpeed = moveToward(currentSpeed, MIN_SPEED, rate * delta);
   } else if (keys.forward && !keys.backward) {
     if (currentSpeed < 0) {
       // Moving backward but W is pressed: brake first
@@ -660,6 +621,11 @@ function updateMotorcycleVisuals(delta) {
   if (keys.left && !keys.right) targetLean = MAX_LEAN_ANGLE;
   if (keys.right && !keys.left) targetLean = -MAX_LEAN_ANGLE;
 
+  // Phone tilt: lean in proportion to the steering amount
+  if (mobile && Math.abs(mobile.steering) > 0.02) {
+    targetLean = MAX_LEAN_ANGLE * mobile.steering;
+  }
+
   // Smoothly move the current lean toward the target (works at any frame rate)
   const leanBlend = 1 - Math.exp(-LEAN_SMOOTHING * delta);
   currentLean += (targetLean - currentLean) * leanBlend;
@@ -743,7 +709,7 @@ const ENGINE_IDLE_RATE = 0.8;       // pitch when the bike is standing still
 const ENGINE_MAX_RATE = 1.8;        // pitch at top speed
 const ENGINE_IDLE_VOLUME = 0.25;    // volume when standing still (0 = silent when stopped)
 const ENGINE_MAX_VOLUME = 0.9;      // volume at top speed
-const ENGINE_THROTTLE_BOOST = 0.1;  // small extra revs/volume while W or S is held
+const ENGINE_THROTTLE_BOOST = 0.1;  // small extra revs/volume while the throttle is pressed
 const ENGINE_SMOOTH_TIME = 0.15;    // higher = slower, smoother changes (seconds)
 
 const soundButton = document.getElementById('sound-toggle');
@@ -850,7 +816,8 @@ function updateEngineSound() {
   if (!engineReady || !soundEnabled || audioContext.state !== 'running') return;
 
   const speedRatio = Math.min(Math.abs(currentSpeed) / MAX_FORWARD_SPEED, 1);
-  const throttle = (keys.forward || keys.backward) ? 1 : 0;
+  const throttlePressed = keys.forward || keys.backward || (mobile !== null && mobile.throttle);
+  const throttle = throttlePressed ? 1 : 0;
 
   const targetRate =
     ENGINE_IDLE_RATE + (ENGINE_MAX_RATE - ENGINE_IDLE_RATE) * speedRatio + throttle * ENGINE_THROTTLE_BOOST;
