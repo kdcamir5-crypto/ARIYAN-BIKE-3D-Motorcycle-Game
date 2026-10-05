@@ -643,6 +643,133 @@ function updateSpeedometer() {
     speedometerValue.textContent = String(kmh);
   }
 }
+// ---------- Engine sound ----------
+// Uses the Web Audio API so the engine loop is seamless and the pitch/volume
+// can change smoothly. It only READS the bike's speed and key state.
+const ENGINE_SOUND_PATH = './sound/engine/engine.mp3'; // relative path (GitHub Pages)
+
+const ENGINE_IDLE_RATE = 0.8;       // pitch when the bike is standing still
+const ENGINE_MAX_RATE = 1.8;        // pitch at top speed
+const ENGINE_IDLE_VOLUME = 0.25;    // volume when standing still (0 = silent when stopped)
+const ENGINE_MAX_VOLUME = 0.9;      // volume at top speed
+const ENGINE_THROTTLE_BOOST = 0.1;  // small extra revs/volume while W or S is held
+const ENGINE_SMOOTH_TIME = 0.15;    // higher = slower, smoother changes (seconds)
+
+const soundButton = document.getElementById('sound-toggle');
+
+let soundEnabled = true;            // controlled by the Sound ON/OFF button
+let audioContext = null;
+let engineGain = null;              // volume control
+let engineSource = null;            // the looping engine sound
+let engineReady = false;            // true once engine.mp3 is loaded and playing
+
+function updateSoundButton() {
+  if (!soundButton) return;
+  soundButton.textContent = soundEnabled ? '\u{1F50A} ON' : '\u{1F507} OFF';
+  soundButton.classList.toggle('off', !soundEnabled);
+  soundButton.setAttribute('aria-pressed', String(soundEnabled));
+}
+updateSoundButton();
+
+// Creates the audio system and loads engine.mp3 (runs after the first user interaction)
+function startEngineSound() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  audioContext = new AudioContextClass();
+  engineGain = audioContext.createGain();
+  engineGain.gain.value = 0;
+  engineGain.connect(audioContext.destination);
+
+  // If sound was already switched off before it loaded, stay suspended
+  if (!soundEnabled) audioContext.suspend();
+
+  fetch(ENGINE_SOUND_PATH)
+    .then((response) => {
+      if (!response.ok) throw new Error('Could not load ' + ENGINE_SOUND_PATH + ' (HTTP ' + response.status + ')');
+      return response.arrayBuffer();
+    })
+    .then((data) => audioContext.decodeAudioData(data))
+    .then((buffer) => {
+      engineSource = audioContext.createBufferSource();
+      engineSource.buffer = buffer;
+      engineSource.loop = true;
+      engineSource.playbackRate.value = ENGINE_IDLE_RATE;
+      engineSource.connect(engineGain);
+      engineSource.start(0);
+      engineReady = true;
+    })
+    .catch((error) => {
+      console.error('Engine sound failed:', error);
+      // Allow another try on the next interaction
+      try { audioContext.close(); } catch (e) { /* ignore */ }
+      audioContext = null;
+      engineGain = null;
+    });
+}
+
+// Called on the first click / touch / key press (browsers need this before playing sound)
+function unlockAudio() {
+  if (!audioContext) {
+    startEngineSound();
+  } else if (soundEnabled && !document.hidden && audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+}
+window.addEventListener('pointerdown', unlockAudio, { passive: true });
+window.addEventListener('touchstart', unlockAudio, { passive: true });
+window.addEventListener('keydown', unlockAudio, { passive: true });
+
+function setSoundEnabled(enabled) {
+  soundEnabled = enabled;
+  updateSoundButton();
+  if (!audioContext) return;
+
+  if (enabled) {
+    audioContext.resume();                     // continues from the bike's current state
+  } else {
+    engineGain.gain.cancelScheduledValues(audioContext.currentTime);
+    engineGain.gain.value = 0;                 // completely silent
+    audioContext.suspend();
+  }
+}
+
+if (soundButton) {
+  soundButton.addEventListener('click', () => {
+    setSoundEnabled(!soundEnabled);
+    soundButton.blur(); // so Space/Enter does not toggle it again
+  });
+}
+
+// Stop the sound while the tab is hidden, continue when it comes back
+document.addEventListener('visibilitychange', () => {
+  if (!audioContext) return;
+  if (document.hidden) {
+    audioContext.suspend();
+  } else if (soundEnabled) {
+    audioContext.resume();
+  }
+});
+
+// Runs every frame: matches pitch and volume to the bike's speed
+function updateEngineSound() {
+  if (!engineReady || !soundEnabled || audioContext.state !== 'running') return;
+
+  const speedRatio = Math.min(Math.abs(currentSpeed) / MAX_FORWARD_SPEED, 1);
+  const throttle = (keys.forward || keys.backward) ? 1 : 0;
+
+  const targetRate =
+    ENGINE_IDLE_RATE + (ENGINE_MAX_RATE - ENGINE_IDLE_RATE) * speedRatio + throttle * ENGINE_THROTTLE_BOOST;
+  const targetVolume = Math.min(
+    ENGINE_IDLE_VOLUME + (ENGINE_MAX_VOLUME - ENGINE_IDLE_VOLUME) * speedRatio + throttle * ENGINE_THROTTLE_BOOST,
+    1
+  );
+
+  // Smooth change (no sudden jumps)
+  const now = audioContext.currentTime;
+  engineSource.playbackRate.setTargetAtTime(targetRate, now, ENGINE_SMOOTH_TIME);
+  engineGain.gain.setTargetAtTime(targetVolume, now, ENGINE_SMOOTH_TIME);
+}
 // ---------- Resize handling (desktop + mobile) ----------
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -666,6 +793,7 @@ function animate() {
   updateMotorcycleVisuals(delta);
   updateFollowCamera(delta);
   updateSpeedometer();
+  updateEngineSound();
   updateEngineSound(currentSpeed);
   renderer.render(scene, camera);
 }
